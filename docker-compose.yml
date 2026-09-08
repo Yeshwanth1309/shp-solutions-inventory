@@ -1,0 +1,55 @@
+# Local development / evaluation stack. Not a production deployment
+# topology — see DEPLOYMENT.md for that.
+name: shp-solutions-inventory
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shp
+      POSTGRES_PASSWORD: shp_dev_password
+      POSTGRES_DB: shp_inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shp -d shp_inventory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://shp:shp_dev_password@db:5432/shp_inventory
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in your .env file}
+    entrypoint: ["node", "--import", "tsx/esm", "scripts/migrate.ts"]
+    restart: "no"
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://shp:shp_dev_password@db:5432/shp_inventory
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in your .env file}
+      NODE_ENV: production
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  db-data:
