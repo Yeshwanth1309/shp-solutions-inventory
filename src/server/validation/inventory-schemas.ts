@@ -52,6 +52,7 @@ export const historyQuerySchema = z.object({
   locationId: z.string().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  sortDir: z.enum(['asc', 'desc']).default('desc'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });

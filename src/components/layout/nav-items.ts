@@ -8,6 +8,7 @@ import {
   Warehouse,
   BarChart3,
   Users,
+  ShieldAlert,
   type LucideIcon,
 } from 'lucide-react';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/locations', label: 'Locations', icon: Warehouse, permission: PERMISSIONS.LOCATION_VIEW },
   { href: '/reports', label: 'Reports', icon: BarChart3, permission: PERMISSIONS.REPORT_VIEW },
   { href: '/users', label: 'Users', icon: Users, permission: PERMISSIONS.USER_VIEW },
+  { href: '/audit', label: 'Audit log', icon: ShieldAlert, permission: PERMISSIONS.AUDIT_VIEW },
 ];
 
 

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { locations, products, stockTransactions, users } from '@/server/db/schema';
 import type { HistoryQueryInput } from '@/server/validation/inventory-schemas';
@@ -42,6 +42,7 @@ export async function listHistory(query: Partial<HistoryQueryInput> = {}): Promi
   if (query.to) filters.push(lte(stockTransactions.createdAt, query.to));
 
   const where = filters.length ? and(...filters) : undefined;
+  const direction = query.sortDir === 'asc' ? asc : desc;
 
   const rows = await db
     .select({
@@ -66,7 +67,7 @@ export async function listHistory(query: Partial<HistoryQueryInput> = {}): Promi
     .innerJoin(locations, eq(locations.id, stockTransactions.locationId))
     .leftJoin(users, eq(users.id, stockTransactions.performedById))
     .where(where)
-    .orderBy(desc(stockTransactions.createdAt), desc(stockTransactions.id))
+    .orderBy(direction(stockTransactions.createdAt), direction(stockTransactions.id))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 

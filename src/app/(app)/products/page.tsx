@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, PackagePlus, PackageMinus, ChevronLeft, ChevronRight, Package } from 'lucide-react';
+import { Plus, PackagePlus, PackageMinus, ChevronLeft, ChevronRight, Package, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,6 +14,7 @@ import { StockStatusBadge } from '@/features/products/status-badge';
 import { ProductFormDialog } from '@/features/products/product-form-dialog';
 import { StockMutationDialog } from '@/features/inventory/stock-mutation-dialog';
 import { useSession } from '@/hooks/use-session';
+import { useToast } from '@/components/ui/toast';
 import { PERMISSIONS } from '@/lib/permissions';
 
 interface ProductRow {
@@ -42,6 +43,15 @@ interface ListResponse {
   options: Options;
 }
 
+const SORT_OPTIONS: Array<{ value: 'name' | 'sku' | 'stock' | 'minimumStock' | 'createdAt' | 'updatedAt'; label: string }> = [
+  { value: 'name', label: 'Name' },
+  { value: 'sku', label: 'SKU' },
+  { value: 'stock', label: 'Stock' },
+  { value: 'minimumStock', label: 'Minimum stock' },
+  { value: 'createdAt', label: 'Date added' },
+  { value: 'updatedAt', label: 'Last updated' },
+];
+
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All' },
   { value: 'IN_STOCK', label: 'In stock' },
@@ -53,10 +63,13 @@ export default function ProductsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { can } = useSession();
+  const { push } = useToast();
 
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState(searchParams.get('status') ?? 'ALL');
   const [categoryId, setCategoryId] = React.useState<string>('ALL');
+  const [sortBy, setSortBy] = React.useState<typeof SORT_OPTIONS[number]['value']>('name');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<ListResponse | null>(null);
   const [productDialog, setProductDialog] = React.useState<{ mode: 'create' } | null>(
@@ -70,10 +83,14 @@ export default function ProductsPage() {
     if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (status !== 'ALL') params.set('status', status);
     if (categoryId !== 'ALL') params.set('categoryId', categoryId);
+    params.set('sortBy', sortBy);
+    params.set('sortDir', sortDir);
     params.set('page', String(page));
     params.set('pageSize', '20');
-    apiGet<ListResponse>(`/api/products?${params.toString()}`).then(setData);
-  }, [debouncedSearch, status, categoryId, page]);
+    apiGet<ListResponse>(`/api/products?${params.toString()}`)
+      .then(setData)
+      .catch(() => push({ title: 'Could not load products. Check your connection and try again.', variant: 'error' }));
+  }, [debouncedSearch, status, categoryId, sortBy, sortDir, page, push]);
 
   React.useEffect(() => {
     load();
@@ -81,7 +98,7 @@ export default function ProductsPage() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, categoryId]);
+  }, [debouncedSearch, status, categoryId, sortBy, sortDir]);
 
   const canMutate = can(PERMISSIONS.INVENTORY_ADD) || can(PERMISSIONS.INVENTORY_REMOVE);
 
@@ -113,6 +130,26 @@ export default function ProductsPage() {
             </SelectContent>
           </Select>
         )}
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+          <SelectTrigger className="w-40">
+            <ArrowUpDown className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+          aria-label={sortDir === 'asc' ? 'Sorted ascending — click for descending' : 'Sorted descending — click for ascending'}
+          title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+        >
+          {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" aria-hidden /> : <ArrowDown className="h-4 w-4" aria-hidden />}
+        </Button>
         <div className="ml-auto">
           {can(PERMISSIONS.PRODUCT_CREATE) && (
             <Button className="gap-2" onClick={() => setProductDialog({ mode: 'create' })}>
@@ -135,7 +172,6 @@ export default function ProductsPage() {
 
       {data && data.items.length > 0 && (
         <>
-          {/* Desktop table */}
           <Card className="hidden overflow-hidden md:block">
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-secondary/40 text-left text-xs font-medium text-muted-foreground">
@@ -184,7 +220,6 @@ export default function ProductsPage() {
             </table>
           </Card>
 
-          {/* Mobile cards */}
           <div className="grid gap-2 md:hidden">
             {data.items.map((row) => (
               <Card key={row.id} className="p-3">

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { History, ChevronLeft, ChevronRight } from 'lucide-react';
+import { History, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { apiGet } from '@/lib/api-client';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { formatDateTime, humanise } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
 
 interface HistoryRow {
   id: string;
@@ -41,8 +42,12 @@ const TYPES = ['ADD', 'REMOVE', 'ADJUSTMENT', 'RETURN', 'DAMAGE', 'PURCHASE', 'S
 
 /** Read-only ledger view (section 22). Corrections show up as their own ADJUSTMENT rows. */
 export default function HistoryPage() {
+  const { push } = useToast();
   const [sku, setSku] = React.useState('');
   const [type, setType] = React.useState<string>('ALL');
+  const [from, setFrom] = React.useState('');
+  const [to, setTo] = React.useState('');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<ListResponse | null>(null);
   const debouncedSku = useDebouncedValue(sku, 300);
@@ -51,10 +56,19 @@ export default function HistoryPage() {
     const params = new URLSearchParams();
     if (debouncedSku.trim()) params.set('sku', debouncedSku.trim());
     if (type !== 'ALL') params.set('type', type);
+    if (from) params.set('from', new Date(from).toISOString());
+    if (to) {
+      const endOfDay = new Date(to);
+      endOfDay.setHours(23, 59, 59, 999);
+      params.set('to', endOfDay.toISOString());
+    }
+    params.set('sortDir', sortDir);
     params.set('page', String(page));
     params.set('pageSize', '25');
-    apiGet<ListResponse>(`/api/inventory/history?${params.toString()}`).then(setData);
-  }, [debouncedSku, type, page]);
+    apiGet<ListResponse>(`/api/inventory/history?${params.toString()}`)
+      .then(setData)
+      .catch(() => push({ title: 'Could not load stock history. Check your connection and try again.', variant: 'error' }));
+  }, [debouncedSku, type, from, to, sortDir, page, push]);
 
   React.useEffect(() => {
     load();
@@ -62,7 +76,7 @@ export default function HistoryPage() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [debouncedSku, type]);
+  }, [debouncedSku, type, from, to, sortDir]);
 
   return (
     <div className="grid gap-4">
@@ -77,12 +91,43 @@ export default function HistoryPage() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="date"
+            aria-label="From date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="w-[150px]"
+          />
+          <span className="text-sm text-muted-foreground">to</span>
+          <Input
+            type="date"
+            aria-label="To date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            min={from || undefined}
+            className="w-[150px]"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+          aria-label={sortDir === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
+          title={sortDir === 'desc' ? 'Newest first' : 'Oldest first'}
+        >
+          {sortDir === 'desc' ? <ArrowDown className="h-4 w-4" aria-hidden /> : <ArrowUp className="h-4 w-4" aria-hidden />}
+        </Button>
       </div>
 
       {data && data.items.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
           <History className="h-8 w-8" aria-hidden />
-          <p className="text-sm">No stock transactions found.</p>
+          <p className="text-sm">
+            {debouncedSku || type !== 'ALL' || from || to
+              ? 'No stock transactions match your filters.'
+              : 'No stock transactions found.'}
+          </p>
         </div>
       )}
 

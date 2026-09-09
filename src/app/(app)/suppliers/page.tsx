@@ -33,19 +33,21 @@ export default function SuppliersPage() {
   const [suppliers, setSuppliers] = React.useState<Supplier[] | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Supplier | null>(null);
-  const [form, setForm] = React.useState({ name: '', contactPerson: '', phone: '', email: '', address: '', notes: '' });
+  const [form, setForm] = React.useState({ name: '', contactPerson: '', phone: '', email: '', address: '', notes: '', isActive: true });
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
   const load = React.useCallback(() => {
-    apiGet<{ suppliers: Supplier[] }>('/api/suppliers').then((data) => setSuppliers(data.suppliers));
-  }, []);
+    apiGet<{ suppliers: Supplier[] }>('/api/suppliers')
+      .then((data) => setSuppliers(data.suppliers))
+      .catch(() => push({ title: 'Could not load suppliers. Check your connection and try again.', variant: 'error' }));
+  }, [push]);
 
   React.useEffect(() => { load(); }, [load]);
 
   function openCreate() {
     setEditing(null);
-    setForm({ name: '', contactPerson: '', phone: '', email: '', address: '', notes: '' });
+    setForm({ name: '', contactPerson: '', phone: '', email: '', address: '', notes: '', isActive: true });
     setError(null);
     setDialogOpen(true);
   }
@@ -59,6 +61,7 @@ export default function SuppliersPage() {
       email: supplier.email ?? '',
       address: supplier.address ?? '',
       notes: supplier.notes ?? '',
+      isActive: supplier.isActive,
     });
     setError(null);
     setDialogOpen(true);
@@ -154,6 +157,12 @@ export default function SuppliersPage() {
               <Label htmlFor="s-address">Address</Label>
               <Input id="s-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
+            {editing && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+                Active
+              </label>
+            )}
             {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={submitting}>{editing ? 'Save changes' : 'Add supplier'}</Button>

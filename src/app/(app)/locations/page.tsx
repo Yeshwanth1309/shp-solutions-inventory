@@ -28,25 +28,27 @@ export default function LocationsPage() {
   const [locations, setLocations] = React.useState<LocationRow[] | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<LocationRow | null>(null);
-  const [form, setForm] = React.useState({ code: '', name: '', address: '', isDefault: false });
+  const [form, setForm] = React.useState({ code: '', name: '', address: '', isDefault: false, isActive: true });
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
   const load = React.useCallback(() => {
-    apiGet<{ locations: LocationRow[] }>('/api/locations').then((data) => setLocations(data.locations));
-  }, []);
+    apiGet<{ locations: LocationRow[] }>('/api/locations')
+      .then((data) => setLocations(data.locations))
+      .catch(() => push({ title: 'Could not load locations. Check your connection and try again.', variant: 'error' }));
+  }, [push]);
   React.useEffect(() => { load(); }, [load]);
 
   function openCreate() {
     setEditing(null);
-    setForm({ code: '', name: '', address: '', isDefault: false });
+    setForm({ code: '', name: '', address: '', isDefault: false, isActive: true });
     setError(null);
     setDialogOpen(true);
   }
 
   function openEdit(loc: LocationRow) {
     setEditing(loc);
-    setForm({ code: loc.code, name: loc.name, address: loc.address ?? '', isDefault: loc.isDefault });
+    setForm({ code: loc.code, name: loc.name, address: loc.address ?? '', isDefault: loc.isDefault, isActive: loc.isActive });
     setError(null);
     setDialogOpen(true);
   }
@@ -98,7 +100,10 @@ export default function LocationsPage() {
                   <p className="font-medium">{loc.name}</p>
                   <p className="text-sm text-muted-foreground">{loc.code}{loc.address ? ` · ${loc.address}` : ''}</p>
                 </div>
-                {loc.isDefault && <Badge>Default</Badge>}
+                <div className="flex gap-1">
+                  {loc.isDefault && <Badge>Default</Badge>}
+                  {!loc.isActive && <Badge variant="destructive">Inactive</Badge>}
+                </div>
               </div>
               {can(PERMISSIONS.LOCATION_MANAGE) && (
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => openEdit(loc)}>Edit</Button>
@@ -130,6 +135,12 @@ export default function LocationsPage() {
               <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} />
               Make this the default location
             </label>
+            {editing && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+                Active
+              </label>
+            )}
             {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={submitting}>{editing ? 'Save changes' : 'Add location'}</Button>
