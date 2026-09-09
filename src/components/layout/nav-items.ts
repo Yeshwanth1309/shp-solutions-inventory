@@ -31,11 +31,4 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/users', label: 'Users', icon: Users, permission: PERMISSIONS.USER_VIEW },
 ];
 
-/** Compact set for the mobile bottom bar — the five most-used destinations. */
-export const MOBILE_NAV_ITEMS: NavItem[] = [
-  NAV_ITEMS[0]!,
-  NAV_ITEMS[1]!,
-  NAV_ITEMS[3]!,
-  NAV_ITEMS[4]!,
-  NAV_ITEMS[2]!,
-];
+
