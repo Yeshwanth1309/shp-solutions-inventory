@@ -15,6 +15,27 @@
       "when": 1788756268107,
       "tag": "0001_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789646533468,
+      "tag": "0002_add_customers_and_transaction_parties",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789646567668,
+      "tag": "0003_add_customer_audit_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789713093075,
+      "tag": "0004_remove_mfa",
+      "breakpoints": true
     }
   ]
 }

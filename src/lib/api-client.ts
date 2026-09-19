@@ -51,6 +51,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const error = body?.error;
+
+    // A protected endpoint returning 401 outside the login/session-check
+    // flow means the session has expired or was revoked mid-use — the most
+    // common source of an otherwise-confusing crash. Send the person back
+    // to sign in instead of leaving the page broken. /api/auth/session
+    // itself is exempt: it reports "not signed in" as a normal 200 with
+    // authenticated:false, so this only fires for genuinely protected calls.
+    const isSessionCheck = path === '/api/auth/session';
+    if (response.status === 401 && !isSessionCheck && typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+
     throw new ApiError(
       response.status,
       error?.code ?? 'UNKNOWN_ERROR',

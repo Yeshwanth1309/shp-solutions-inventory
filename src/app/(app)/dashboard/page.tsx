@@ -11,14 +11,13 @@ import {
   PackagePlus,
   PackageMinus,
   Search,
-  ArrowUpRight,
-  ArrowDownRight,
-  History as HistoryIcon,
+  Printer,
+  ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiGet } from '@/lib/api-client';
-import { formatDateTime, formatNumber, humanise } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { StockMutationDialog } from '@/features/inventory/stock-mutation-dialog';
 import { useToast } from '@/components/ui/toast';
 
@@ -30,24 +29,17 @@ interface DashboardStats {
   totalUnits: number;
 }
 
-interface ActivityRow {
-  id: string;
-  type: string;
-  direction: 'IN' | 'OUT';
-  quantity: number;
-  newStock: number;
-  createdAt: string;
-  reason: string;
-  productId: string;
-  productName: string;
-  sku: string;
-  performedByName: string | null;
-  locationName: string;
+interface ModelStockRow {
+  model: string;
+  productCount: number;
+  outOfStock: number;
+  lowStock: number;
+  inStock: number;
 }
 
 interface DashboardResponse {
   stats: DashboardStats;
-  recentActivity: ActivityRow[];
+  modelSummary: ModelStockRow[];
   isEmpty: boolean;
 }
 
@@ -58,6 +50,117 @@ const TILES: Array<{ key: keyof DashboardStats; label: string; icon: typeof Pack
   { key: 'outOfStock', label: 'Out of stock', icon: XCircle, tone: 'text-destructive', href: '/inventory/out-of-stock' },
   { key: 'totalUnits', label: 'Total units', icon: Boxes, tone: 'text-foreground', href: '/products' },
 ];
+
+/**
+ * The dashboard leads with what a printer/toner business actually needs at a
+ * glance: total stock health, then — in place of a generic transaction log —
+ * which specific printer models are running low or out of the consumables
+ * and parts that fit them. The full chronological history still has its own
+ * dedicated page (Stock History); this view answers a different question:
+ * "if a customer walks in with a Canon G3010, do we have what they need."
+ */
+interface ModelProductRow {
+  id: string;
+  sku: string;
+  name: string;
+  stock: number;
+  minimumStock: number;
+  status: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+}
+
+const STATUS_STYLES: Record<ModelProductRow['status'], string> = {
+  OUT_OF_STOCK: 'bg-destructive/10 text-destructive',
+  LOW_STOCK: 'bg-warn/10 text-warn',
+  IN_STOCK: 'bg-ok/10 text-ok',
+};
+
+const STATUS_LABELS: Record<ModelProductRow['status'], string> = {
+  OUT_OF_STOCK: 'Out',
+  LOW_STOCK: 'Low',
+  IN_STOCK: 'OK',
+};
+
+/**
+ * One printer model's row on the dashboard. Clicking anywhere on it expands
+ * an inline list of exactly which products (toners, ink, parts) are marked
+ * compatible with that model and what each one's current stock is — so
+ * "does the shop have what a Canon G3010 needs" is answerable without ever
+ * leaving the dashboard. The product list is fetched lazily, only on first
+ * expand, since most rows on a busy dashboard will never be opened.
+ */
+function ModelRow({ row }: { row: ModelStockRow }) {
+  const [open, setOpen] = React.useState(false);
+  const [products, setProducts] = React.useState<ModelProductRow[] | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && products === null) {
+      setLoading(true);
+      apiGet<{ products: ModelProductRow[] }>(`/api/dashboard/model-products?model=${encodeURIComponent(row.model)}`)
+        .then((data) => setProducts(data.products))
+        .catch(() => setProducts([]))
+        .finally(() => setLoading(false));
+    }
+  }
+
+  return (
+    <li className="px-4 py-3">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between gap-3 text-left"
+        aria-expanded={open}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden />
+          <Printer className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{row.model}</p>
+            <p className="text-xs text-muted-foreground">
+              {row.productCount} compatible item{row.productCount === 1 ? '' : 's'} — click to see which
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          {row.outOfStock > 0 && (
+            <span className="rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive">{row.outOfStock} out</span>
+          )}
+          {row.lowStock > 0 && (
+            <span className="rounded-md bg-warn/10 px-2 py-1 text-xs font-medium text-warn">{row.lowStock} low</span>
+          )}
+          {row.inStock > 0 && (
+            <span className="rounded-md bg-ok/10 px-2 py-1 text-xs font-medium text-ok">{row.inStock} ok</span>
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="mt-2 ml-6 grid gap-1 border-l border-border pl-4">
+          {loading && <p className="py-1 text-xs text-muted-foreground">Loading…</p>}
+          {!loading && products && products.length === 0 && (
+            <p className="py-1 text-xs text-muted-foreground">No compatible products found.</p>
+          )}
+          {!loading && products?.map((p) => (
+            <Link
+              key={p.id}
+              href={`/products/${p.id}`}
+              className="flex items-center justify-between gap-3 rounded-md py-1.5 pr-2 text-sm hover:bg-accent/40"
+            >
+              <span className="min-w-0 truncate">
+                {p.name} <span className="text-xs text-muted-foreground">{p.sku}</span>
+              </span>
+              <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums ${STATUS_STYLES[p.status]}`}>
+                {p.stock} · {STATUS_LABELS[p.status]}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </li>
+  );
+}
 
 export default function DashboardPage() {
   const { push } = useToast();
@@ -137,49 +240,20 @@ export default function DashboardPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>Recent activity</CardTitle>
-          {data && data.recentActivity.length > 0 && (
-            <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
-              <Link href="/inventory/history">
-                <HistoryIcon className="h-3.5 w-3.5" aria-hidden /> View all
-              </Link>
-            </Button>
-          )}
+        <CardHeader>
+          <CardTitle>Printer models &amp; their stock</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {!data || data.recentActivity.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-muted-foreground">No stock transactions found.</p>
+          {!data || data.modelSummary.length === 0 ? (
+            <p className="px-4 pb-4 text-sm text-muted-foreground">
+              No products list a compatible printer model yet — add one under a product&apos;s
+              &quot;Compatible with&quot; field to see it summarised here.
+            </p>
           ) : (
             <ul className="divide-y divide-border">
-              {data.recentActivity.map((row) => {
-                const DirectionIcon = row.direction === 'IN' ? ArrowUpRight : ArrowDownRight;
-                return (
-                  <li key={row.id} className="flex items-center gap-3 px-4 py-3">
-                    <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                        row.direction === 'IN' ? 'bg-ok/10 text-ok' : 'bg-destructive/10 text-destructive'
-                      }`}
-                    >
-                      <DirectionIcon className="h-4 w-4" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <Link href={`/products/${row.productId}`} className="truncate text-sm font-medium hover:underline">
-                        {row.productName}
-                      </Link>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {row.sku} · {humanise(row.reason)} · {row.performedByName ?? 'System'} · {formatDateTime(row.createdAt)}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 text-sm font-medium tabular-nums ${row.direction === 'IN' ? 'text-ok' : 'text-destructive'}`}
-                    >
-                      {row.direction === 'IN' ? '+' : '−'}
-                      {row.quantity}
-                    </span>
-                  </li>
-                );
-              })}
+              {data.modelSummary.map((row) => (
+                <ModelRow key={row.model} row={row} />
+              ))}
             </ul>
           )}
         </CardContent>

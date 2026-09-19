@@ -9,6 +9,16 @@ import { NAV_ITEMS } from './nav-items';
 import { useSession } from '@/hooks/use-session';
 import { MobileMoreSheet } from './mobile-more-sheet';
 
+/**
+ * Bottom tab bar. Only the four most-used destinations get a permanent slot
+ * — a phone screen has room for about five before labels start truncating
+ * illegibly. The fifth slot is always "More", which opens every other page
+ * (Categories, Brands, Suppliers, Locations, Reports, Users, and anything
+ * added later) in a full-screen sheet — so nothing is ever reachable only
+ * from the desktop sidebar. Picking primary items by href keeps this
+ * correct even as NAV_ITEMS grows, rather than a hardcoded array index that
+ * silently goes stale (which is what broke this before).
+ */
 const PRIMARY_HREFS = ['/dashboard', '/products', '/inventory/history', '/inventory/low-stock'];
 
 export function MobileNav() {

@@ -345,6 +345,27 @@ export async function updateProduct(id: string, input: ProductUpdateInput, actor
   return product;
 }
 
+/**
+ * Distinct printer-model names already used across every product's
+ * "compatible with" list, matching a search term — backs the autocomplete
+ * in the product form. This exists specifically so the same model gets
+ * entered the same way every time (e.g. always "Canon PIXMA G3010", never
+ * sometimes "Canon G3010") — the dashboard's model grouping matches by
+ * exact string, so inconsistent naming there would silently split one
+ * model's stock picture into two.
+ */
+export async function searchCompatibilityModels(term: string, limit = 8): Promise<string[]> {
+  const pattern = `%${term.trim()}%`;
+  const rows = await db.execute<{ model: string }>(sql`
+    select distinct model
+    from (select unnest(compatibility) as model from products) all_models
+    where model ilike ${pattern}
+    order by model asc
+    limit ${limit}
+  `);
+  return rows.rows.map((r) => r.model);
+}
+
 /** Reference data for the product form and filter bar. */
 export async function getCatalogueOptions() {
   const [categoryRows, brandRows, supplierRows] = await Promise.all([

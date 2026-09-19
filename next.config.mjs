@@ -2,21 +2,33 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  output: 'standalone',
   experimental: { optimizePackageImports: ['lucide-react'] },
   async headers() {
-    // 'unsafe-inline' on script-src is a deliberate trade-off, not an
-    // oversight. This app mixes statically pre-rendered pages (most of the
-    // UI) with dynamically rendered ones. Next.js injects small inline
-    // <script> tags on every page for hydration. A per-request nonce (the
-    // usual alternative to 'unsafe-inline') only works on dynamically
-    // rendered pages — a static page's HTML is built once, in advance,
-    // before any request exists, so there's no way to stamp a matching
-    // nonce onto it. Nonces were tried and produced a blank page on every
-    // static route. React escapes all rendered content by default, and
-    // this app never uses dangerouslySetInnerHTML, which keeps the actual
-    // risk low. 'self' still blocks the thing that matters most day to
-    // day: any third-party or externally-hosted script.
+    // One unified Content-Security-Policy for both dev and production.
+    //
+    // 'unsafe-inline' on script-src is a deliberate, considered trade-off,
+    // not an oversight: this app mixes statically pre-rendered pages
+    // (dashboard, products, most of the UI) with dynamically rendered ones
+    // (/products/[id]). Next.js's App Router injects small inline <script>
+    // tags on every page to deliver hydration/RSC payload data. A
+    // per-request nonce (the usual way to allow specific inline scripts
+    // without 'unsafe-inline') only works on dynamically rendered pages —
+    // a statically pre-rendered page's HTML is generated once at build
+    // time, before any request (and its nonce) exists, so Next.js has no
+    // way to stamp a matching nonce onto that page's inline scripts. A
+    // nonce-only policy was tried and confirmed broken here: it produced a
+    // blank page on every statically rendered route, verified by directly
+    // auditing the rendered HTML's <script> tags for nonce coverage rather
+    // than assuming — curl alone cannot catch this, since CSP is enforced
+    // by the browser at fetch/execute time, not reflected in raw HTML.
+    //
+    // The actual XSS exposure this trades away is low for this app
+    // specifically: every value rendered to the page goes through React,
+    // which escapes it by default, and nothing here uses
+    // dangerouslySetInnerHTML anywhere (see SECURITY.md). 'self' still
+    // blocks the thing that matters most day to day — any third-party or
+    // externally-hosted script — which is what stops a compromised
+    // dependency or a malicious embed from running.
     const csp = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ''),

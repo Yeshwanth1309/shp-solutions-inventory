@@ -18,7 +18,8 @@
     "test:db:setup": "tsx scripts/setup-test-db.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:demo": "tsx scripts/seed-demo-data.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -36,9 +37,7 @@
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.469.0",
     "next": "^15.5.25",
-    "otplib": "^12.0.1",
     "pg": "^8.23.0",
-    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
@@ -51,7 +50,6 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.5",
     "@types/pg": "^8.23.1",
-    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "@typescript-eslint/eslint-plugin": "^8.20.0",

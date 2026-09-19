@@ -26,7 +26,7 @@ infrastructure was provisioned if it wasn't" (section 12).
 
 Whichever provider you choose, you need:
 
-1. **Compute** to run the Docker image (or `node .next/standalone/server.js`
+1. **Compute** to run the app as a persistent Node process (`npm run start`
    directly) — a single small container/instance is enough at this
    business's scale. ECS Fargate, Cloud Run, a basic VM, or a PaaS like
    Railway/Render/Fly.io are all reasonable; nothing in the app assumes one

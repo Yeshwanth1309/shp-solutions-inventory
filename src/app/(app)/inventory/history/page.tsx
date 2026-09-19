@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { History, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { History, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, StickyNote, Truck, User } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,8 @@ interface HistoryRow {
   notes: string | null;
   performedByName: string | null;
   locationName: string;
+  supplierName: string | null;
+  customerName: string | null;
 }
 
 interface ListResponse {
@@ -40,7 +42,14 @@ interface ListResponse {
 
 const TYPES = ['ADD', 'REMOVE', 'ADJUSTMENT', 'RETURN', 'DAMAGE', 'PURCHASE', 'SALE'];
 
-/** Read-only ledger view (section 22). Corrections show up as their own ADJUSTMENT rows. */
+/**
+ * Read-only ledger view (section 22). Corrections show up as their own
+ * ADJUSTMENT rows. Each row can carry a supplier (where a purchase came
+ * from), a customer (where a sale went), and free-text notes — none of
+ * these are guaranteed to be present, since they're optional at the point
+ * of recording the movement, so each is shown only when it exists rather
+ * than as an empty column.
+ */
 export default function HistoryPage() {
   const { push } = useToast();
   const [sku, setSku] = React.useState('');
@@ -50,6 +59,7 @@ export default function HistoryPage() {
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<ListResponse | null>(null);
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const debouncedSku = useDebouncedValue(sku, 300);
 
   const load = React.useCallback(() => {
@@ -77,6 +87,8 @@ export default function HistoryPage() {
   React.useEffect(() => {
     setPage(1);
   }, [debouncedSku, type, from, to, sortDir]);
+
+  const hasExtra = (row: HistoryRow) => Boolean(row.notes || row.supplierName || row.customerName);
 
   return (
     <div className="grid gap-4">
@@ -146,25 +158,71 @@ export default function HistoryPage() {
                   <th className="px-4 py-2.5 text-right">New</th>
                   <th className="px-4 py-2.5">Reason</th>
                   <th className="px-4 py-2.5">By</th>
+                  <th className="px-4 py-2.5" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.items.map((row) => (
-                  <tr key={row.id} className="hover:bg-accent/40">
-                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{formatDateTime(row.createdAt)}</td>
-                    <td className="px-4 py-2.5">
-                      <Link href={`/products/${row.productId}`} className="font-medium hover:underline">{row.productName}</Link>
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.sku}</td>
-                    <td className="px-4 py-2.5"><Badge variant={row.direction === 'IN' ? 'ok' : 'destructive'}>{humanise(row.type)}</Badge></td>
-                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${row.direction === 'IN' ? 'text-ok' : 'text-destructive'}`}>
-                      {row.direction === 'IN' ? '+' : '−'}{row.quantity}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{row.previousStock}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-medium">{row.newStock}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.reason}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.performedByName ?? '—'}</td>
-                  </tr>
+                  <React.Fragment key={row.id}>
+                    <tr
+                      className={`hover:bg-accent/40 ${hasExtra(row) ? 'cursor-pointer' : ''}`}
+                      onClick={() => hasExtra(row) && setExpandedId(expandedId === row.id ? null : row.id)}
+                    >
+                      <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{formatDateTime(row.createdAt)}</td>
+                      <td className="px-4 py-2.5">
+                        <Link href={`/products/${row.productId}`} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
+                          {row.productName}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.sku}</td>
+                      <td className="px-4 py-2.5"><Badge variant={row.direction === 'IN' ? 'ok' : 'destructive'}>{humanise(row.type)}</Badge></td>
+                      <td className={`px-4 py-2.5 text-right tabular-nums font-medium ${row.direction === 'IN' ? 'text-ok' : 'text-destructive'}`}>
+                        {row.direction === 'IN' ? '+' : '−'}{row.quantity}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{row.previousStock}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-medium">{row.newStock}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.reason}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.performedByName ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {hasExtra(row) && (
+                          <span className="inline-flex gap-1 text-muted-foreground">
+                            {row.notes && <StickyNote className="h-3.5 w-3.5" aria-label="Has notes" />}
+                            {row.supplierName && <Truck className="h-3.5 w-3.5" aria-label="Has supplier" />}
+                            {row.customerName && <User className="h-3.5 w-3.5" aria-label="Has customer" />}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {expandedId === row.id && hasExtra(row) && (
+                      <tr className="bg-secondary/30">
+                        <td colSpan={10} className="px-4 py-3 text-sm">
+                          <div className="grid gap-1.5 sm:grid-cols-3">
+                            {row.supplierName && (
+                              <div className="flex items-center gap-1.5">
+                                <Truck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                                <span className="text-muted-foreground">Supplier:</span>
+                                <span className="font-medium">{row.supplierName}</span>
+                              </div>
+                            )}
+                            {row.customerName && (
+                              <div className="flex items-center gap-1.5">
+                                <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                                <span className="text-muted-foreground">Customer:</span>
+                                <span className="font-medium">{row.customerName}</span>
+                              </div>
+                            )}
+                            {row.notes && (
+                              <div className="flex items-start gap-1.5 sm:col-span-3">
+                                <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                                <span className="text-muted-foreground">Notes:</span>
+                                <span>{row.notes}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -183,6 +241,21 @@ export default function HistoryPage() {
                   {row.sku} · {humanise(row.type)} · {row.reason} · {formatDateTime(row.createdAt)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">{row.previousStock} → {row.newStock} · {row.performedByName ?? 'System'}</p>
+                {row.supplierName && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Truck className="h-3 w-3" aria-hidden /> {row.supplierName}
+                  </p>
+                )}
+                {row.customerName && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <User className="h-3 w-3" aria-hidden /> {row.customerName}
+                  </p>
+                )}
+                {row.notes && (
+                  <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground">
+                    <StickyNote className="mt-0.5 h-3 w-3 shrink-0" aria-hidden /> {row.notes}
+                  </p>
+                )}
               </Card>
             ))}
           </div>

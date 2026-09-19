@@ -21,7 +21,7 @@ import { AdjustStockDialog } from '@/features/inventory/adjust-stock-dialog';
 import { ProductFormDialog } from '@/features/products/product-form-dialog';
 import { useSession } from '@/hooks/use-session';
 import { PERMISSIONS } from '@/lib/permissions';
-import { humanise } from '@/lib/utils';
+import { humanise, formatDateTime } from '@/lib/utils';
 import type { ProductInput } from '@/server/validation/product-schemas';
 import { useToast } from '@/components/ui/toast';
 
@@ -66,6 +66,22 @@ interface Options {
   suppliers: Array<{ id: string; name: string }>;
 }
 
+interface MovementRow {
+  id: string;
+  createdAt: string;
+  type: string;
+  direction: 'IN' | 'OUT';
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  notes: string | null;
+  performedByName: string | null;
+  locationName: string;
+  supplierName: string | null;
+  customerName: string | null;
+}
+
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -73,6 +89,7 @@ export default function ProductDetailPage() {
   const { push } = useToast();
   const [product, setProduct] = React.useState<ProductDetail | null>(null);
   const [byLocation, setByLocation] = React.useState<LocationRow[]>([]);
+  const [movements, setMovements] = React.useState<MovementRow[]>([]);
   const [options, setOptions] = React.useState<Options | null>(null);
   const [mutation, setMutation] = React.useState<'add' | 'remove' | null>(null);
   const [adjusting, setAdjusting] = React.useState(false);
@@ -87,6 +104,12 @@ export default function ProductDetailPage() {
         setByLocation(data.byLocation);
       })
       .catch(() => push({ title: 'Could not load this product.', variant: 'error' }));
+    apiGet<{ items: MovementRow[] }>(`/api/products/${params.id}/movements`)
+      .then((data) => setMovements(data.items))
+      .catch(() => {
+        // Non-fatal: the movement history is a secondary panel — the page's
+        // core stock info above already loaded independently.
+      });
   }, [params.id, push]);
 
   React.useEffect(() => {
@@ -157,6 +180,14 @@ export default function ProductDetailPage() {
             {!product.isActive && <Badge variant="destructive">Inactive</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">{product.sku}</p>
+          {product.compatibility.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Compatible with:</span>
+              {product.compatibility.map((model) => (
+                <Badge key={model} variant="outline">{model}</Badge>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           {can(PERMISSIONS.PRODUCT_UPDATE) && (
@@ -238,6 +269,37 @@ export default function ProductDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>Movement history</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          {movements.length === 0 ? (
+            <p className="px-4 pb-4 text-sm text-muted-foreground">No stock movements recorded for this product yet.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {movements.map((m) => (
+                <li key={m.id} className="px-4 py-2.5 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="font-medium">{humanise(m.type)}</span>
+                      <span className="text-muted-foreground"> · {m.reason} · {formatDateTime(m.createdAt)}</span>
+                    </div>
+                    <span className={`shrink-0 font-medium tabular-nums ${m.direction === 'IN' ? 'text-ok' : 'text-destructive'}`}>
+                      {m.direction === 'IN' ? '+' : '−'}{m.quantity}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {m.previousStock} → {m.newStock} · {m.locationName} · {m.performedByName ?? 'System'}
+                    {m.supplierName && <> · from <span className="font-medium text-foreground">{m.supplierName}</span></>}
+                    {m.customerName && <> · to <span className="font-medium text-foreground">{m.customerName}</span></>}
+                  </p>
+                  {m.notes && <p className="mt-0.5 text-xs text-muted-foreground">Note: {m.notes}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       {mutation && (
         <StockMutationDialog

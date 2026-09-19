@@ -9,6 +9,7 @@ import { apiGet } from '@/lib/api-client';
 import { StockMutationDialog } from './stock-mutation-dialog';
 import { useSession } from '@/hooks/use-session';
 import { PERMISSIONS } from '@/lib/permissions';
+import { useToast } from '@/components/ui/toast';
 
 interface AttentionItem {
   id: string;
@@ -25,13 +26,16 @@ interface AttentionItem {
 /** Shared list for /inventory/low-stock and /inventory/out-of-stock (sections 23–24). */
 export function AttentionList({ mode }: { mode: 'LOW_STOCK' | 'OUT_OF_STOCK' }) {
   const { can } = useSession();
+  const { push } = useToast();
   const [items, setItems] = React.useState<AttentionItem[] | null>(null);
   const [target, setTarget] = React.useState<AttentionItem | null>(null);
   const endpoint = mode === 'LOW_STOCK' ? '/api/inventory/low-stock' : '/api/inventory/out-of-stock';
 
   const load = React.useCallback(() => {
-    apiGet<{ items: AttentionItem[] }>(endpoint).then((data) => setItems(data.items));
-  }, [endpoint]);
+    apiGet<{ items: AttentionItem[] }>(endpoint)
+      .then((data) => setItems(data.items))
+      .catch(() => push({ title: 'Could not load this list. Check your connection and try again.', variant: 'error' }));
+  }, [endpoint, push]);
 
   React.useEffect(() => {
     load();

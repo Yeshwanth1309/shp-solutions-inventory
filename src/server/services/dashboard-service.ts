@@ -19,10 +19,109 @@ export interface DashboardStats {
   inactiveProducts: number;
 }
 
+export interface ModelStockRow {
+  model: string;
+  productCount: number;
+  outOfStock: number;
+  lowStock: number;
+  inStock: number;
+}
+
 /** coalesce(sum(stock_levels.quantity), 0) per product, as a scalar subquery. */
 const STOCK_EXPR = sql<number>`coalesce((
   select sum(sl.quantity) from stock_levels sl where sl.product_id = products.id
 ), 0)`;
+
+/**
+ * Groups active products by each printer model they're marked compatible
+ * with (products.compatibility is a text array — one product, e.g. a toner,
+ * can list several models it fits), and rolls up their stock status per
+ * model. This is what replaces a generic activity feed on the dashboard: it
+ * answers "does this compatible with model X have what it needs right now"
+ * directly, rather than requiring someone to scan a transaction log.
+ *
+ * Ordered so the models with the most urgent supply gaps (most out-of-stock
+ * compatible items) surface first.
+ */
+export async function getModelStockSummary(limit = 8): Promise<ModelStockRow[]> {
+  const rows = await db.execute<{
+    model: string;
+    product_count: number;
+    out_of_stock: number;
+    low_stock: number;
+    in_stock: number;
+  }>(sql`
+    select
+      model,
+      count(*)::int as product_count,
+      count(*) filter (where stock <= 0)::int as out_of_stock,
+      count(*) filter (where stock > 0 and stock <= minimum_stock)::int as low_stock,
+      count(*) filter (where stock > minimum_stock)::int as in_stock
+    from (
+      select
+        unnest(p.compatibility) as model,
+        p.minimum_stock,
+        coalesce((select sum(sl.quantity) from stock_levels sl where sl.product_id = p.id), 0) as stock
+      from products p
+      where p.is_active = true and array_length(p.compatibility, 1) > 0
+    ) expanded
+    group by model
+    order by out_of_stock desc, low_stock desc, model asc
+    limit ${limit}
+  `);
+
+  return rows.rows.map((r) => ({
+    model: r.model,
+    productCount: r.product_count,
+    outOfStock: r.out_of_stock,
+    lowStock: r.low_stock,
+    inStock: r.in_stock,
+  }));
+}
+
+export interface ModelProductRow {
+  id: string;
+  sku: string;
+  name: string;
+  stock: number;
+  minimumStock: number;
+  status: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+}
+
+/**
+ * Every active product compatible with one specific printer model, with its
+ * current stock — backs the dashboard's expandable model rows (click a
+ * model, see exactly which toners/parts fit it and what's in stock, without
+ * leaving the page).
+ */
+export async function getProductsForModel(model: string): Promise<ModelProductRow[]> {
+  const rows = await db.execute<{
+    id: string;
+    sku: string;
+    name: string;
+    minimum_stock: number;
+    stock: number;
+  }>(sql`
+    select
+      p.id,
+      p.sku,
+      p.name,
+      p.minimum_stock,
+      coalesce((select sum(sl.quantity) from stock_levels sl where sl.product_id = p.id), 0)::int as stock
+    from products p
+    where p.is_active = true and ${model} = any(p.compatibility)
+    order by p.name asc
+  `);
+
+  return rows.rows.map((r) => ({
+    id: r.id,
+    sku: r.sku,
+    name: r.name,
+    stock: r.stock,
+    minimumStock: r.minimum_stock,
+    status: r.stock <= 0 ? 'OUT_OF_STOCK' : r.stock <= r.minimum_stock ? 'LOW_STOCK' : 'IN_STOCK',
+  }));
+}
 
 export async function getDashboardStats(locationId?: string): Promise<DashboardStats> {
   const stockExpr = locationId

@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { apiGet, apiPost, apiPatch, ApiError, newRequestId } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { humanise } from '@/lib/utils';
+import { CompatibilityInput } from '@/features/products/compatibility-input';
 import {
   productSchema,
   PRODUCT_UNITS,
@@ -50,11 +51,23 @@ interface Props {
   categories: Option[];
   brands: Option[];
   suppliers: Option[];
+  /** Present when editing; absent when creating. */
   product?: ExistingProduct;
 }
 
 const NONE = '__none__';
 
+/**
+ * Create/edit form (section 9 of the brief). Every field the database and
+ * Zod schema support is here — barcode, model, part numbers, and the
+ * printer-domain attributes — not just the handful originally exposed.
+ *
+ * On CREATE only, an optional "starting stock" section lets the person set
+ * an initial quantity at a chosen location in the same step — this calls
+ * the same idempotent add-stock endpoint the dedicated Add Stock flow uses,
+ * with reason "Purchase", so it produces a normal, auditable ledger entry
+ * rather than a special-cased silent stock write.
+ */
 export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, brands, suppliers, product }: Props) {
   const { push } = useToast();
   const isEdit = Boolean(product);
@@ -108,7 +121,10 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
           const defaultLoc = data.locations.find((l) => l.isDefault);
           setStartingLocationId(defaultLoc?.id ?? data.locations[0]?.id ?? '');
         })
-        .catch(() => {});
+        .catch(() => {
+          // Non-fatal: the starting-stock section just won't have options.
+          // Product creation itself doesn't depend on this succeeding.
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -331,6 +347,21 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
               <Label htmlFor="manufacturerPartNumber">Manufacturer part number (optional)</Label>
               <Input id="manufacturerPartNumber" {...register('manufacturerPartNumber')} />
             </div>
+          
+          </div>
+
+                    <div className="grid gap-1.5">
+            <Label htmlFor="compatibility">Compatible with (optional)</Label>
+            <Controller
+              control={control}
+              name="compatibility"
+              render={({ field }) => (
+                <CompatibilityInput id="compatibility" value={field.value ?? []} onChange={field.onChange} />
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              Start typing a printer model — matching models already used elsewhere will show up to pick from, or press Enter to add a new one.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

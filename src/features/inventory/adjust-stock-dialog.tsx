@@ -31,11 +31,20 @@ interface LocationOption {
 
 interface Props {
   product: ProductLite;
+  /** Current stock at the selected location, so the before/after preview is accurate. Refetched when the location changes. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
+/**
+ * Stock correction (sections 20-22 of the brief: "corrections should create
+ * new adjustment transactions"). Unlike Add/Remove, this asks for the actual
+ * counted quantity directly — "I counted 47" — rather than making the person
+ * work out the difference themselves. The server still records it as a
+ * normal ledger entry (type ADJUSTMENT) computed from the difference; the UI
+ * just removes the mental math.
+ */
 export function AdjustStockDialog({ product, open, onOpenChange, onSuccess }: Props) {
   const { push } = useToast();
   const [locations, setLocations] = React.useState<LocationOption[]>([]);

@@ -1,9 +1,9 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/db/client';
-import { brands, categories, locations, products, suppliers } from '@/server/db/schema';
+import { brands, categories, customers, locations, products, suppliers } from '@/server/db/schema';
 import { conflict, notFound } from '@/lib/errors';
 import { recordAudit } from './audit-service';
-import type { BrandInput, CategoryInput, LocationInput, SupplierInput } from '@/server/validation/catalogue-schemas';
+import type { BrandInput, CategoryInput, CustomerInput, LocationInput, SupplierInput } from '@/server/validation/catalogue-schemas';
 
 type Actor = { id: string; email: string };
 
@@ -67,6 +67,71 @@ export async function updateSupplier(id: string, input: Partial<SupplierInput>, 
     summary: `Updated supplier ${supplier.name}`,
   });
   return supplier;
+}
+
+// --- Customers ---------------------------------------------------------------
+// Same pattern as suppliers, but productCount doesn't apply here — a
+// customer isn't linked to a product record, only to the individual sale
+// transactions they've been recorded against.
+
+export async function listCustomers(includeInactive = true) {
+  return db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      contactPerson: customers.contactPerson,
+      phone: customers.phone,
+      email: customers.email,
+      address: customers.address,
+      notes: customers.notes,
+      isActive: customers.isActive,
+      purchaseCount: sql<number>`(select count(*) from stock_transactions st where st.customer_id = customers.id)::int`,
+    })
+    .from(customers)
+    .where(includeInactive ? undefined : eq(customers.isActive, true))
+    .orderBy(asc(customers.name));
+}
+
+export async function createCustomer(input: CustomerInput, actor: Actor) {
+  const existing = await db.select({ id: customers.id }).from(customers).where(eq(customers.name, input.name)).limit(1);
+  if (existing[0]) throw conflict('A customer with that name already exists.');
+
+  const inserted = await db
+    .insert(customers)
+    .values({ ...input, email: input.email || null })
+    .returning();
+  const customer = inserted[0];
+  if (!customer) throw conflict('The customer could not be created.');
+
+  await recordAudit({
+    action: 'CUSTOMER_CREATED',
+    actorId: actor.id,
+    actorEmail: actor.email,
+    entityType: 'customer',
+    entityId: customer.id,
+    summary: `Added customer ${customer.name}`,
+  });
+  return customer;
+}
+
+export async function updateCustomer(id: string, input: Partial<CustomerInput>, actor: Actor) {
+  const updated = await db
+    .update(customers)
+    .set({ ...input, email: input.email === '' ? null : input.email })
+    .where(eq(customers.id, id))
+    .returning();
+  const customer = updated[0];
+  if (!customer) throw notFound('That customer no longer exists.');
+
+  await recordAudit({
+    action: 'CUSTOMER_UPDATED',
+    actorId: actor.id,
+    actorEmail: actor.email,
+    entityType: 'customer',
+    entityId: id,
+    summary: `Updated customer ${customer.name}`,
+  });
+  return customer;
 }
 
 // --- Locations -------------------------------------------------------------

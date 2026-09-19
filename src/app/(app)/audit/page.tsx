@@ -21,8 +21,7 @@ interface AuditRow {
 }
 
 const ACTIONS = [
-  'LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'SESSION_REVOKED',
-  'MFA_ENROLLED', 'MFA_REMOVED', 'MFA_RECOVERY_USED', 'PASSWORD_CHANGED',
+  'LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'SESSION_REVOKED', 'PASSWORD_CHANGED',
   'USER_CREATED', 'USER_UPDATED', 'USER_DISABLED', 'USER_ENABLED', 'ROLE_CHANGED',
   'PRODUCT_CREATED', 'PRODUCT_UPDATED', 'PRODUCT_DEACTIVATED',
   'STOCK_ADDED', 'STOCK_REMOVED', 'STOCK_ADJUSTED',
@@ -32,6 +31,13 @@ const ACTIONS = [
 
 const PAGE_SIZE = 50;
 
+/**
+ * Read-only view over the security/business audit trail (section 35 of the
+ * brief) — logins, role changes, product edits, every stock movement. The
+ * API doesn't return a total row count, so pagination here is deliberately
+ * honest about that: "Next" is only enabled when a full page came back
+ * (meaning there's likely more), rather than showing a fabricated total.
+ */
 export default function AuditPage() {
   const { push } = useToast();
   const [action, setAction] = React.useState('ALL');

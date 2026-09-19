@@ -13,4 +13,3 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 next-env.d.ts
-.github/workflows/

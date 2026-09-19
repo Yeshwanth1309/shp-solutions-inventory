@@ -10,6 +10,13 @@ import { NAV_ITEMS } from './nav-items';
 import { useSession } from '@/hooks/use-session';
 import { apiPost } from '@/lib/api-client';
 
+/**
+ * Full-screen "More" menu for mobile — everything the desktop sidebar shows,
+ * filtered by permission the same way. The bottom tab bar only has room for
+ * a handful of shortcuts; this is where every other page (Categories,
+ * Brands, Suppliers, Locations, Reports, Users, etc.) lives on a phone, so
+ * nothing is ever only reachable from desktop.
+ */
 export function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const pathname = usePathname();
   const { session, can } = useSession();

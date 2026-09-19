@@ -19,10 +19,9 @@ on a laptop or a phone.
 9. [Local development](#local-development)
 10. [Testing](#testing)
 11. [Build](#build)
-12. [Docker](#docker)
-13. [Deployment](#deployment)
-14. [Security](#security)
-15. [Troubleshooting](#troubleshooting)
+12. [Deployment](#deployment)
+13. [Security](#security)
+14. [Troubleshooting](#troubleshooting)
 
 ## Project overview
 
@@ -142,9 +141,9 @@ values — see section 49 of the original brief and
 
 ## Database setup
 
-You need a PostgreSQL 16 server reachable at `DATABASE_URL`. Locally, the
-fastest path is `docker-compose up db` (see [Docker](#docker)), or a native
-install.
+You need a PostgreSQL 16 server reachable at `DATABASE_URL` — either a
+native local install, or a hosted instance from your deployment platform
+(e.g. Railway's own PostgreSQL add-on).
 
 Create the database, then run migrations (below). **Nothing beyond schema
 and access-control reference data (roles, permissions) is ever inserted
@@ -217,39 +216,15 @@ E2E tests need a Chromium download and a running server; see
 ## Build
 
 ```bash
-npm run build   # runs `next build`; produces .next/standalone
-npm run start   # `next start`, reads .next directly (dev/simple deployments)
+npm run build   # runs `next build`
+npm run start   # `next start` — this is what production deployments use
 ```
-
-For the Docker image, `node .next/standalone/server.js` is the actual
-entrypoint — see [Docker](#docker).
 
 This has been run to completion in the environment this project was built
-in: `next build` compiles all 45 routes (32 API, 13 pages), generates the
-16 static pages, and finishes with no errors. `npm run start` /
-`node .next/standalone/server.js` have been smoke-tested against a live
-Postgres instance: login, session resolution, product/category creation,
-stock add, dashboard aggregation, and insufficient-stock rejection all
-verified over real HTTP.
-
-## Docker
-
-```bash
-cp .env.example .env   # fill in AUTH_SECRET at minimum
-docker compose up --build
-```
-
-This starts Postgres, runs migrations once, then starts the app on
-`http://localhost:3000`. See [DEPLOYMENT.md](./DEPLOYMENT.md) for what this
-does and does not cover in production.
-
-**Honesty note:** the Docker build has been written and reviewed carefully
-(multi-stage, non-root user, health check, no baked-in secrets — section 50
-of the brief) but **not executed**, because no Docker daemon was available in
-the sandbox this project was built in. Everything else in this README that
-says "verified" or "has been run" means exactly that; this is the one
-exception, and it's called out per section 2 of the original brief rather
-than left for you to discover.
+in: `next build` compiles every route cleanly and finishes with no errors.
+`npm run start` has been smoke-tested against a live Postgres instance:
+login, session resolution, product/category creation, stock add, dashboard
+aggregation, and insufficient-stock rejection all verified over real HTTP.
 
 ## Deployment
 

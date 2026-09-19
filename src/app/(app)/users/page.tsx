@@ -19,7 +19,6 @@ interface UserRow {
   email: string;
   name: string;
   isActive: boolean;
-  mfaEnabled: boolean;
   lastLoginAt: string | null;
   roleKey: 'ADMIN' | 'INVENTORY_MANAGER' | 'STAFF';
   roleName: string;
@@ -41,8 +40,10 @@ export default function UsersPage() {
   const [submitting, setSubmitting] = React.useState(false);
 
   const load = React.useCallback(() => {
-    apiGet<{ users: UserRow[] }>('/api/users').then((data) => setUsers(data.users));
-  }, []);
+    apiGet<{ users: UserRow[] }>('/api/users')
+      .then((data) => setUsers(data.users))
+      .catch(() => push({ title: 'Could not load users. Check your connection and try again.', variant: 'error' }));
+  }, [push]);
   React.useEffect(() => { load(); }, [load]);
 
   async function onCreate(event: React.FormEvent) {
@@ -106,7 +107,6 @@ export default function UsersPage() {
               <th className="px-4 py-2.5">Name</th>
               <th className="px-4 py-2.5">Email</th>
               <th className="px-4 py-2.5">Role</th>
-              <th className="px-4 py-2.5">2FA</th>
               <th className="px-4 py-2.5">Last sign-in</th>
               <th className="px-4 py-2.5">Status</th>
               <th className="px-4 py-2.5 text-right">Actions</th>
@@ -124,9 +124,6 @@ export default function UsersPage() {
                       {ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                </td>
-                <td className="px-4 py-2.5">
-                  <Badge variant={user.mfaEnabled ? 'ok' : 'default'}>{user.mfaEnabled ? 'On' : 'Off'}</Badge>
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : 'Never'}</td>
                 <td className="px-4 py-2.5">

@@ -1,0 +1,2 @@
+ALTER TYPE "public"."audit_action" ADD VALUE 'CUSTOMER_CREATED' BEFORE 'LOCATION_CREATED';--> statement-breakpoint
+ALTER TYPE "public"."audit_action" ADD VALUE 'CUSTOMER_UPDATED' BEFORE 'LOCATION_CREATED';

@@ -20,7 +20,6 @@ export interface AuthenticatedUser {
   roleKey: RoleKey;
   roleName: string;
   isActive: boolean;
-  mfaEnabled: boolean;
   mustChangePassword: boolean;
   permissions: Set<string>;
 }
@@ -31,7 +30,6 @@ export interface AuthenticatedSession {
   createdAt: Date;
   lastActiveAt: Date;
   expiresAt: Date;
-  mfaVerifiedAt: Date | null;
 }
 
 export interface CreatedSession {
@@ -57,7 +55,6 @@ export async function createSession(params: {
   userId: string;
   ipAddress?: string | null;
   userAgent?: string | null;
-  mfaVerified: boolean;
 }): Promise<CreatedSession> {
   const token = generateSessionToken();
   const expiresAt = absoluteExpiry();
@@ -68,7 +65,6 @@ export async function createSession(params: {
       userId: params.userId,
       tokenHash: hashSessionToken(token),
       expiresAt,
-      mfaVerifiedAt: params.mfaVerified ? new Date() : null,
       ipAddress: params.ipAddress ?? null,
       userAgent: params.userAgent?.slice(0, 512) ?? null,
     })
@@ -94,12 +90,10 @@ export async function resolveSession(token: string | undefined): Promise<Authent
       lastActiveAt: sessions.lastActiveAt,
       expiresAt: sessions.expiresAt,
       revokedAt: sessions.revokedAt,
-      mfaVerifiedAt: sessions.mfaVerifiedAt,
       userId: users.id,
       email: users.email,
       name: users.name,
       isActive: users.isActive,
-      mfaEnabled: users.mfaEnabled,
       mustChangePassword: users.mustChangePassword,
       roleKey: roles.key,
       roleName: roles.name,
@@ -130,7 +124,6 @@ export async function resolveSession(token: string | undefined): Promise<Authent
     createdAt: row.createdAt,
     lastActiveAt: now,
     expiresAt: row.expiresAt,
-    mfaVerifiedAt: row.mfaVerifiedAt,
     user: {
       id: row.userId,
       email: row.email,
@@ -138,15 +131,10 @@ export async function resolveSession(token: string | undefined): Promise<Authent
       roleKey: row.roleKey as RoleKey,
       roleName: row.roleName,
       isActive: row.isActive,
-      mfaEnabled: row.mfaEnabled,
       mustChangePassword: row.mustChangePassword,
       permissions: resolvePermissions(row.roleKey as RoleKey, overrides),
     },
   };
-}
-
-export async function markSessionMfaVerified(sessionId: string): Promise<void> {
-  await db.update(sessions).set({ mfaVerifiedAt: new Date() }).where(eq(sessions.id, sessionId));
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {
@@ -192,11 +180,7 @@ export async function pruneExpiredSessions(): Promise<number> {
   return rows.length;
 }
 
-/**
- * True when the session authenticated recently enough to permit a sensitive
- * change (password, MFA, role assignment).
- */
+/** True when the session authenticated recently enough to permit a sensitive change (password, role assignment). */
 export function hasRecentAuth(session: AuthenticatedSession, withinMinutes = 15): boolean {
-  const reference = session.mfaVerifiedAt ?? session.createdAt;
-  return Date.now() - reference.getTime() <= withinMinutes * 60 * 1000;
+  return Date.now() - session.createdAt.getTime() <= withinMinutes * 60 * 1000;
 }

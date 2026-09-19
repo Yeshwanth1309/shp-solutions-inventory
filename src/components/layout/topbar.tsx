@@ -32,9 +32,13 @@ export function Topbar({ title }: { title: string }) {
       return;
     }
     let cancelled = false;
-    apiGet<{ results: QuickResult[] }>(`/api/products/search?q=${encodeURIComponent(debounced)}`).then((data) => {
-      if (!cancelled) setResults(data.results);
-    });
+    apiGet<{ results: QuickResult[] }>(`/api/products/search?q=${encodeURIComponent(debounced)}`)
+      .then((data) => {
+        if (!cancelled) setResults(data.results);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      });
     return () => {
       cancelled = true;
     };

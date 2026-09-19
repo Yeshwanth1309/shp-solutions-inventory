@@ -26,27 +26,6 @@ describe('password hashing', () => {
   });
 });
 
-describe('AES-256-GCM secret sealing (MFA secrets)', () => {
-  it('round-trips a TOTP secret', async () => {
-    const { encryptSecret, decryptSecret } = await import('@/server/auth/crypto');
-    const sealed = encryptSecret('JBSWY3DPEHPK3PXP');
-    expect(decryptSecret(sealed)).toBe('JBSWY3DPEHPK3PXP');
-  });
-
-  it('produces ciphertext that does not contain the plaintext', async () => {
-    const { encryptSecret } = await import('@/server/auth/crypto');
-    const sealed = encryptSecret('JBSWY3DPEHPK3PXP');
-    expect(sealed.ciphertext).not.toContain('JBSWY3DPEHPK3PXP');
-  });
-
-  it('fails to decrypt if the auth tag has been tampered with', async () => {
-    const { encryptSecret, decryptSecret } = await import('@/server/auth/crypto');
-    const sealed = encryptSecret('JBSWY3DPEHPK3PXP');
-    const tampered = { ...sealed, authTag: Buffer.from('0'.repeat(24), 'base64').toString('base64') };
-    expect(() => decryptSecret(tampered)).toThrow();
-  });
-});
-
 describe('session tokens', () => {
   it('generates a high-entropy, URL-safe token', async () => {
     const { generateSessionToken } = await import('@/server/auth/crypto');
@@ -64,18 +43,5 @@ describe('session tokens', () => {
   it('produces different hashes for different tokens', async () => {
     const { hashSessionToken } = await import('@/server/auth/crypto');
     expect(hashSessionToken('a')).not.toBe(hashSessionToken('b'));
-  });
-});
-
-describe('recovery codes', () => {
-  it('generates codes in the expected XXXX-XXXX-XXXX shape', async () => {
-    const { generateRecoveryCode } = await import('@/server/auth/crypto');
-    const code = generateRecoveryCode();
-    expect(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)).toBe(true);
-  });
-
-  it('hashes a recovery code case- and whitespace-insensitively', async () => {
-    const { hashRecoveryCode } = await import('@/server/auth/crypto');
-    expect(hashRecoveryCode('abcd-efgh-1234')).toBe(hashRecoveryCode(' ABCD-EFGH-1234 '));
   });
 });

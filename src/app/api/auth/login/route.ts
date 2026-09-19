@@ -14,10 +14,8 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/auth/login
  *
- * A new session is always issued here rather than upgrading an existing one,
- * which is what closes session fixation. When the account has MFA enabled the
- * session is created unverified and is useless until /api/auth/mfa/verify
- * succeeds.
+ * Email and password only. A new session is always issued here rather than
+ * upgrading an existing one, which is what closes session fixation.
  */
 export const POST = withRoute(async (request: NextRequest) => {
   const body = loginSchema.parse(await request.json());
@@ -29,25 +27,21 @@ export const POST = withRoute(async (request: NextRequest) => {
     userId: credentials.userId,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
-    mfaVerified: !credentials.mfaEnabled,
   });
 
   await writeSessionCookie(session.token, session.expiresAt);
   await issueCsrfCookie(generateCsrfToken());
 
-  if (!credentials.mfaEnabled) {
-    await recordAudit({
-      action: 'LOGIN',
-      actorId: credentials.userId,
-      actorEmail: credentials.email,
-      summary: `Signed in as ${credentials.email}`,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-    });
-  }
+  await recordAudit({
+    action: 'LOGIN',
+    actorId: credentials.userId,
+    actorEmail: credentials.email,
+    summary: `Signed in as ${credentials.email}`,
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
+  });
 
   return ok({
-    mfaRequired: credentials.mfaEnabled,
     mustChangePassword: credentials.mustChangePassword,
     user: { id: credentials.userId, email: credentials.email, name: credentials.name, roleKey: credentials.roleKey },
   });

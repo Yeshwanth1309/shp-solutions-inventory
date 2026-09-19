@@ -151,22 +151,22 @@ business's scale, but not architected to make that swap hard either.
 
 `.env.example` lists variable names only — no real values, ever (section 49
 of the brief). `.env` is gitignored. `AUTH_SECRET` must be 32+ bytes; the
-app refuses to start otherwise (`lib/env.ts`). Docker images never bake in
-secrets — they're supplied at runtime via environment variables (see
-[DEPLOYMENT.md](./DEPLOYMENT.md)).
+app refuses to start otherwise (`lib/env.ts`). Secrets are never baked into
+the build — they're supplied at runtime via environment variables set on
+the deployment platform (see [DEPLOYMENT.md](./DEPLOYMENT.md)).
 
 ## Logging
 
 Structured JSON (`lib/logger.ts`) with a fixed redaction list — password,
-token, secret, MFA/TOTP fields, and several near-spellings of each, replaced
-with `[redacted]` regardless of how deeply nested the object is. Passwords,
-tokens, MFA secrets, and encryption keys are never logged in any form
-(section 35 of the brief).
+token, secret, and several near-spellings of each, replaced with
+`[redacted]` regardless of how deeply nested the object is. Passwords,
+tokens, and encryption keys are never logged in any form (section 35 of
+the brief).
 
 ## Audit logging
 
 `audit_logs` records every event listed in section 35 of the brief: logins
-(success and failure), MFA and password changes, user/role changes, product
+(success and failure), password changes, user/role changes, product
 create/update/deactivate, every stock movement, supplier/location changes,
 and settings changes. Stock-movement audit entries are written inside the
 *same* database transaction as the ledger row they describe
@@ -200,11 +200,10 @@ them, checked directly rather than assumed:
    tests and generate migrations at development time; they are never
    imported by any file under `src/app` or `src/server` that ships to
    production.
-2. **They do not reach the deployed artifact.** Confirmed directly:
-   `.next/standalone/node_modules` — the exact tree the Docker image and
-   `node .next/standalone/server.js` actually run — contains no `vite` or
-   `vitest` package at all. Next.js's build only traces and bundles the
-   runtime dependencies actual application code imports.
+2. **They do not reach the deployed artifact.** `vitest`/`vite` are never
+   imported by any file under `src/app` or `src/server`; Next.js's build
+   only bundles the runtime dependencies application code actually imports,
+   so the deployed process never loads either package.
 3. **The one `critical`-rated finding** (arbitrary file read when Vitest's
    optional `--ui` dev server is listening) requires deliberately running
    `vitest --ui`, which no script in `package.json` invokes and which was

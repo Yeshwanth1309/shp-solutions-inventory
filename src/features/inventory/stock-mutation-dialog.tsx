@@ -20,6 +20,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const ADD_REASONS = ['Purchase', 'Restock', 'Customer Return', 'Stock Correction', 'Other'] as const;
 const REMOVE_REASONS = ['Sale', 'Damaged', 'Returned to Supplier', 'Stock Correction', 'Other'] as const;
+const NONE = '__none__';
 
 interface ProductLite {
   id: string;
@@ -27,6 +28,11 @@ interface ProductLite {
   name: string;
   minimumStock: number;
   stock: number;
+}
+
+interface PartyOption {
+  id: string;
+  name: string;
 }
 
 interface Props {
@@ -42,11 +48,19 @@ type Step = 'pick' | 'confirm' | 'done';
 
 /**
  * Shared Add/Remove Stock flow (sections 20–21 of the brief): pick a product
- * (if not already given), enter quantity + reason, see a before/after preview,
- * confirm, then a success toast and a callback so the caller can refresh.
+ * (if not already given), enter quantity + reason, optionally record which
+ * supplier a purchase came from or which customer a sale went to, see a
+ * before/after preview, confirm, then a success toast.
  *
- * Every submit carries a fresh idempotency key generated once per dialog open,
- * so a retried click or a flaky connection cannot double-post the movement.
+ * Supplier/customer are both optional — not every movement has one worth
+ * recording (a damage write-off has no customer; an internal stock
+ * correction has neither) — and the picker is lazy: the supplier/customer
+ * list is only fetched once the dialog actually reaches the confirm step,
+ * not on every open, since most stock edits don't need it.
+ *
+ * Every submit carries a fresh idempotency key generated once per dialog
+ * open, so a retried click or a flaky connection cannot double-post the
+ * movement.
  */
 export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, product: fixedProduct }: Props) {
   const { push } = useToast();
@@ -57,6 +71,8 @@ export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, produ
   const [quantity, setQuantity] = React.useState('');
   const [reason, setReason] = React.useState<string>('');
   const [notes, setNotes] = React.useState('');
+  const [parties, setParties] = React.useState<PartyOption[]>([]);
+  const [partyId, setPartyId] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const requestIdRef = React.useRef(newRequestId());
@@ -64,6 +80,9 @@ export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, produ
 
   const reasons = mode === 'add' ? ADD_REASONS : REMOVE_REASONS;
   const isAdd = mode === 'add';
+  const partyLabel = isAdd ? 'Supplier' : 'Customer';
+  const partyEndpoint = isAdd ? '/api/suppliers' : '/api/customers';
+  const partyKey = isAdd ? 'suppliers' : 'customers';
 
   React.useEffect(() => {
     if (!open) return;
@@ -75,6 +94,8 @@ export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, produ
     setQuantity('');
     setReason('');
     setNotes('');
+    setPartyId('');
+    setParties([]);
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -85,13 +106,34 @@ export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, produ
       return;
     }
     let cancelled = false;
-    apiGet<{ results: ProductLite[] }>(`/api/products/search?q=${encodeURIComponent(debouncedTerm)}`).then((data) => {
-      if (!cancelled) setResults(data.results);
-    });
+    apiGet<{ results: ProductLite[] }>(`/api/products/search?q=${encodeURIComponent(debouncedTerm)}`)
+      .then((data) => {
+        if (!cancelled) setResults(data.results);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      });
     return () => {
       cancelled = true;
     };
   }, [debouncedTerm, step]);
+
+  // Fetch the supplier/customer list only once the dialog actually reaches
+  // the confirm step — most stock edits are quick and never touch this.
+  React.useEffect(() => {
+    if (step !== 'confirm') return;
+    let cancelled = false;
+    apiGet<Record<string, PartyOption[]>>(partyEndpoint)
+      .then((data) => {
+        if (!cancelled) setParties(data[partyKey] ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setParties([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, partyEndpoint, partyKey]);
 
   const quantityNumber = Number(quantity);
   const validQuantity = Number.isInteger(quantityNumber) && quantityNumber > 0;
@@ -108,19 +150,14 @@ export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, produ
         quantity: quantityNumber,
         reason,
         notes: notes || undefined,
+        ...(isAdd ? { supplierId: partyId || undefined } : { customerId: partyId || undefined }),
         requestId: requestIdRef.current,
       });
       push({ title: 'Stock successfully updated.', variant: 'success' });
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'INSUFFICIENT_STOCK') {
-        setError(err.message);
-      } else if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Something went wrong. Try again.');
-      }
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -225,6 +262,21 @@ export function StockMutationDialog({ mode, open, onOpenChange, onSuccess, produ
                     <SelectItem key={r} value={r}>
                       {r}
                     </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="party">{partyLabel} (optional)</Label>
+              <Select value={partyId || NONE} onValueChange={(v) => setPartyId(v === NONE ? '' : v)}>
+                <SelectTrigger id="party">
+                  <SelectValue placeholder={parties.length === 0 ? `No ${partyLabel.toLowerCase()}s yet` : `Choose a ${partyLabel.toLowerCase()}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Not recorded</SelectItem>
+                  {parties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

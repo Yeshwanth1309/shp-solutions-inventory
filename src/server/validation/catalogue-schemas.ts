@@ -15,6 +15,22 @@ export const supplierSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+/** Same shape as suppliers, deliberately — see the schema comment on the customers table. */
+export const customerSchema = z.object({
+  name: z.string().trim().min(2, 'Enter a customer name').max(160),
+  contactPerson: z.string().trim().max(120).optional(),
+  phone: z
+    .string()
+    .trim()
+    .max(32)
+    .regex(/^[+0-9()\s-]*$/, 'Use digits, spaces, brackets, + or -')
+    .optional(),
+  email: z.union([z.string().trim().email('Enter a valid email address').max(254), z.literal('')]).optional(),
+  address: z.string().trim().max(500).optional(),
+  notes: z.string().trim().max(1000).optional(),
+  isActive: z.boolean().default(true),
+});
+
 export const locationSchema = z.object({
   code: z
     .string()
@@ -46,6 +62,7 @@ export const brandSchema = z.object({
 });
 
 export type SupplierInput = z.infer<typeof supplierSchema>;
+export type CustomerInput = z.infer<typeof customerSchema>;
 export type LocationInput = z.infer<typeof locationSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type BrandInput = z.infer<typeof brandSchema>;

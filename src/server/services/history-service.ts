@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db/client';
-import { locations, products, stockTransactions, users } from '@/server/db/schema';
+import { customers, locations, products, stockTransactions, suppliers, users } from '@/server/db/schema';
 import type { HistoryQueryInput } from '@/server/validation/inventory-schemas';
 import type { Paginated } from './product-service';
 
@@ -20,6 +20,10 @@ export interface HistoryRow {
   performedByName: string | null;
   performedByEmail: string | null;
   locationName: string;
+  /** Which supplier this batch came from — set on IN movements only, when recorded. */
+  supplierName: string | null;
+  /** Which customer this went to — set on OUT movements only, when recorded. */
+  customerName: string | null;
 }
 
 /**
@@ -36,6 +40,8 @@ export async function listHistory(query: Partial<HistoryQueryInput> = {}): Promi
   if (query.sku) filters.push(ilike(products.sku, `%${query.sku}%`));
   if (query.type) filters.push(eq(stockTransactions.type, query.type));
   if (query.performedById) filters.push(eq(stockTransactions.performedById, query.performedById));
+  if (query.supplierId) filters.push(eq(stockTransactions.supplierId, query.supplierId));
+  if (query.customerId) filters.push(eq(stockTransactions.customerId, query.customerId));
   if (query.locationId) filters.push(eq(stockTransactions.locationId, query.locationId));
   if (query.reason) filters.push(ilike(stockTransactions.reason, `%${query.reason}%`));
   if (query.from) filters.push(gte(stockTransactions.createdAt, query.from));
@@ -61,11 +67,15 @@ export async function listHistory(query: Partial<HistoryQueryInput> = {}): Promi
       performedByName: users.name,
       performedByEmail: users.email,
       locationName: locations.name,
+      supplierName: suppliers.name,
+      customerName: customers.name,
     })
     .from(stockTransactions)
     .innerJoin(products, eq(products.id, stockTransactions.productId))
     .innerJoin(locations, eq(locations.id, stockTransactions.locationId))
     .leftJoin(users, eq(users.id, stockTransactions.performedById))
+    .leftJoin(suppliers, eq(suppliers.id, stockTransactions.supplierId))
+    .leftJoin(customers, eq(customers.id, stockTransactions.customerId))
     .where(where)
     .orderBy(direction(stockTransactions.createdAt), direction(stockTransactions.id))
     .limit(pageSize)
@@ -95,4 +105,15 @@ export async function getHistoryActors() {
     .from(stockTransactions)
     .innerJoin(users, eq(users.id, stockTransactions.performedById))
     .orderBy(users.name);
+}
+
+/**
+ * Full inbound/outbound movement history for a single product — "where it
+ * came from, where it went" (section requested explicitly). Reuses
+ * listHistory scoped to one product; kept as a thin named wrapper so the
+ * product detail page's intent is clear at the call site.
+ */
+export async function getProductMovementHistory(productId: string, limit = 20) {
+  const page = await listHistory({ productId, pageSize: limit, sortDir: 'desc' });
+  return page.items;
 }

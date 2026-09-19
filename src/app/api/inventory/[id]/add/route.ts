@@ -28,6 +28,7 @@ export const POST = withRoute<Context>(async (request: Request, { params }) => {
     reason: body.reason,
     notes: body.notes,
     locationId: body.locationId,
+    supplierId: body.supplierId,
     requestId: body.requestId,
     performedById: session.user.id,
     performedByEmail: session.user.email,

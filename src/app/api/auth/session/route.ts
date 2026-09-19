@@ -11,14 +11,12 @@ export const GET = withRoute(async () => {
 
   return ok({
     authenticated: true,
-    mfaSatisfied: !session.user.mfaEnabled || Boolean(session.mfaVerifiedAt),
     user: {
       id: session.user.id,
       email: session.user.email,
       name: session.user.name,
       roleKey: session.user.roleKey,
       roleName: session.user.roleName,
-      mfaEnabled: session.user.mfaEnabled,
       mustChangePassword: session.user.mustChangePassword,
       permissions: [...session.user.permissions],
     },

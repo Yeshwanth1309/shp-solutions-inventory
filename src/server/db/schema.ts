@@ -100,6 +100,11 @@ export const auditActionEnum = pgEnum('audit_action', [
   'LOGIN_FAILED',
   'LOGOUT',
   'SESSION_REVOKED',
+  // MFA was removed from the app entirely (see AUTH.md / the login route).
+  // These three values are kept here, unused, because PostgreSQL has no way
+  // to drop a value from an existing enum type without recreating it — a
+  // risky migration for zero benefit, since a few unreferenced enum values
+  // are completely harmless. Nothing in the codebase writes these anymore.
   'MFA_ENROLLED',
   'MFA_REMOVED',
   'MFA_RECOVERY_USED',
@@ -117,6 +122,8 @@ export const auditActionEnum = pgEnum('audit_action', [
   'STOCK_ADJUSTED',
   'SUPPLIER_CREATED',
   'SUPPLIER_UPDATED',
+  'CUSTOMER_CREATED',
+  'CUSTOMER_UPDATED',
   'LOCATION_CREATED',
   'LOCATION_UPDATED',
   'SETTINGS_CHANGED',
@@ -170,7 +177,6 @@ export const users = pgTable(
       .notNull()
       .references(() => roles.id, { onDelete: 'restrict' }),
     isActive: boolean('is_active').notNull().default(true),
-    mfaEnabled: boolean('mfa_enabled').notNull().default(false),
     mustChangePassword: boolean('must_change_password').notNull().default(false),
     failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -222,39 +228,10 @@ export const sessions = pgTable(
     lastActiveAt: timestamp('last_active_at', { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
-    mfaVerifiedAt: timestamp('mfa_verified_at', { withTimezone: true }),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
   },
   (t) => [index('sessions_user_idx').on(t.userId), index('sessions_expires_idx').on(t.expiresAt)],
-);
-
-/** TOTP secret, encrypted at the application layer with AES-256-GCM. */
-export const mfaCredentials = pgTable('mfa_credentials', {
-  id: id(),
-  userId: text('user_id')
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  secretCiphertext: text('secret_ciphertext').notNull(),
-  secretIv: text('secret_iv').notNull(),
-  secretAuthTag: text('secret_auth_tag').notNull(),
-  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
-  createdAt: createdAt(),
-});
-
-export const mfaRecoveryCodes = pgTable(
-  'mfa_recovery_codes',
-  {
-    id: id(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    codeHash: text('code_hash').notNull(),
-    usedAt: timestamp('used_at', { withTimezone: true }),
-    createdAt: createdAt(),
-  },
-  (t) => [index('mfa_recovery_codes_user_idx').on(t.userId)],
 );
 
 /** Fixed-window counters backing the rate limiter. */
@@ -299,6 +276,25 @@ export const brands = pgTable('brands', {
 });
 
 export const suppliers = pgTable('suppliers', {
+  id: id(),
+  name: text('name').notNull().unique(),
+  contactPerson: text('contact_person'),
+  phone: text('phone'),
+  email: text('email'),
+  address: text('address'),
+  notes: text('notes'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * Customers — the sale-side counterpart to suppliers. A product is never
+ * sourced from one fixed supplier or sold to one fixed customer; each is
+ * recorded per stock movement instead (see stockTransactions below), which
+ * is why this table has no relation back to products directly.
+ */
+export const customers = pgTable('customers', {
   id: id(),
   name: text('name').notNull().unique(),
   contactPerson: text('contact_person'),
@@ -420,6 +416,13 @@ export const stockTransactions = pgTable(
     newStock: integer('new_stock').notNull(),
     reason: text('reason').notNull(),
     notes: text('notes'),
+    // Which supplier a purchase/return came from, or which customer a sale
+    // went to. Both nullable and independent of the product's own record —
+    // the same SKU is routinely sourced from more than one supplier over
+    // time and sold to many different customers, so this belongs on the
+    // individual movement, not fixed to the product.
+    supplierId: text('supplier_id').references(() => suppliers.id, { onDelete: 'set null' }),
+    customerId: text('customer_id').references(() => customers.id, { onDelete: 'set null' }),
     performedById: text('performed_by_id').references(() => users.id, { onDelete: 'set null' }),
     requestId: text('request_id').notNull().unique(),
     createdAt: createdAt(),
@@ -429,6 +432,8 @@ export const stockTransactions = pgTable(
     index('stock_transactions_created_idx').on(t.createdAt),
     index('stock_transactions_location_idx').on(t.locationId),
     index('stock_transactions_performed_by_idx').on(t.performedById),
+    index('stock_transactions_supplier_idx').on(t.supplierId),
+    index('stock_transactions_customer_idx').on(t.customerId),
     index('stock_transactions_type_idx').on(t.type),
     check('stock_transactions_quantity_positive', sql`${t.quantity} > 0`),
     check('stock_transactions_previous_non_negative', sql`${t.previousStock} >= 0`),
@@ -495,10 +500,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   role: one(roles, { fields: [users.roleId], references: [roles.id] }),
   sessions: many(sessions),
   userPermissions: many(userPermissions),
-  mfaCredential: one(mfaCredentials, {
-    fields: [users.id],
-    references: [mfaCredentials.userId],
-  }),
 }));
 
 export const userPermissionsRelations = relations(userPermissions, ({ one }) => ({
@@ -513,10 +514,6 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));
 
-export const mfaCredentialsRelations = relations(mfaCredentials, ({ one }) => ({
-  user: one(users, { fields: [mfaCredentials.userId], references: [users.id] }),
-}));
-
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
     fields: [categories.parentId],
@@ -528,7 +525,13 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
 }));
 
 export const brandsRelations = relations(brands, ({ many }) => ({ products: many(products) }));
-export const suppliersRelations = relations(suppliers, ({ many }) => ({ products: many(products) }));
+export const suppliersRelations = relations(suppliers, ({ many }) => ({
+  defaultForProducts: many(products),
+  transactions: many(stockTransactions),
+}));
+export const customersRelations = relations(customers, ({ many }) => ({
+  transactions: many(stockTransactions),
+}));
 export const locationsRelations = relations(locations, ({ many }) => ({
   stockLevels: many(stockLevels),
   transactions: many(stockTransactions),
@@ -550,6 +553,8 @@ export const stockLevelsRelations = relations(stockLevels, ({ one }) => ({
 export const stockTransactionsRelations = relations(stockTransactions, ({ one }) => ({
   product: one(products, { fields: [stockTransactions.productId], references: [products.id] }),
   location: one(locations, { fields: [stockTransactions.locationId], references: [locations.id] }),
+  supplier: one(suppliers, { fields: [stockTransactions.supplierId], references: [suppliers.id] }),
+  customer: one(customers, { fields: [stockTransactions.customerId], references: [customers.id] }),
   performedBy: one(users, { fields: [stockTransactions.performedById], references: [users.id] }),
 }));
 
@@ -568,6 +573,7 @@ export type NewProduct = typeof products.$inferInsert;
 export type StockLevel = typeof stockLevels.$inferSelect;
 export type StockTransaction = typeof stockTransactions.$inferSelect;
 export type Supplier = typeof suppliers.$inferSelect;
+export type Customer = typeof customers.$inferSelect;
 export type Location = typeof locations.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Brand = typeof brands.$inferSelect;

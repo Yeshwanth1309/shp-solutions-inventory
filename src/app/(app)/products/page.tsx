@@ -28,10 +28,15 @@ interface ProductRow {
   status: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 }
 
+interface CatalogueOption {
+  id: string;
+  name: string;
+}
+
 interface Options {
-  categories: Array<{ id: string; name: string }>;
-  brands: Array<{ id: string; name: string }>;
-  suppliers: Array<{ id: string; name: string }>;
+  categories: CatalogueOption[];
+  brands: CatalogueOption[];
+  suppliers: CatalogueOption[];
 }
 
 interface ListResponse {
@@ -102,6 +107,26 @@ export default function ProductsPage() {
 
   const canMutate = can(PERMISSIONS.INVENTORY_ADD) || can(PERMISSIONS.INVENTORY_REMOVE);
 
+  // Every value the JSX below needs is derived ONCE, here, with a safe
+  // fallback. This is deliberate: `data` is only ever fully present or
+  // fully null in a correct render, but hardening every field centrally —
+  // rather than re-deriving `data?.whatever` at each point of use scattered
+  // through the JSX — means a partial/transitional `data` shape (from a
+  // slow response, a race between renders, or any other transient cause)
+  // can never crash this page. Each individual `data?.x` guard that used to
+  // live inline below was a place this could be missed; this can't be.
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const currentPage = data?.page ?? 1;
+  const pageSize = data?.pageSize ?? 20;
+  const pageCount = data?.pageCount ?? 1;
+  const options: Options = {
+    categories: data?.options?.categories ?? [],
+    brands: data?.options?.brands ?? [],
+    suppliers: data?.options?.suppliers ?? [],
+  };
+  const hasLoaded = data !== null;
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -119,12 +144,12 @@ export default function ProductsPage() {
             ))}
           </SelectContent>
         </Select>
-        {data && data.options.categories.length > 0 && (
+        {options.categories.length > 0 && (
           <Select value={categoryId} onValueChange={setCategoryId}>
             <SelectTrigger className="w-44"><SelectValue placeholder="Category" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All categories</SelectItem>
-              {data.options.categories.map((c) => (
+              {options.categories.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>
@@ -159,7 +184,7 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {data && data.items.length === 0 && (
+      {hasLoaded && items.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
           <Package className="h-8 w-8" aria-hidden />
           <p className="text-sm">
@@ -170,8 +195,9 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {data && data.items.length > 0 && (
+      {items.length > 0 && (
         <>
+          {/* Desktop table */}
           <Card className="hidden overflow-hidden md:block">
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-secondary/40 text-left text-xs font-medium text-muted-foreground">
@@ -187,7 +213,7 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {data.items.map((row) => (
+                {items.map((row) => (
                   <tr key={row.id} className="hover:bg-accent/40">
                     <td className="px-4 py-2.5">
                       <Link href={`/products/${row.id}`} className="font-medium hover:underline">
@@ -220,8 +246,9 @@ export default function ProductsPage() {
             </table>
           </Card>
 
+          {/* Mobile cards */}
           <div className="grid gap-2 md:hidden">
-            {data.items.map((row) => (
+            {items.map((row) => (
               <Card key={row.id} className="p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -256,13 +283,13 @@ export default function ProductsPage() {
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>
-              {(data.page - 1) * data.pageSize + 1}–{Math.min(data.page * data.pageSize, data.total)} of {data.total}
+              {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, total)} of {total}
             </span>
             <div className="flex items-center gap-1">
-              <Button size="icon" variant="outline" disabled={data.page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
+              <Button size="icon" variant="outline" disabled={currentPage <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
                 <ChevronLeft className="h-4 w-4" aria-hidden />
               </Button>
-              <Button size="icon" variant="outline" disabled={data.page >= data.pageCount} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
+              <Button size="icon" variant="outline" disabled={currentPage >= pageCount} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
                 <ChevronRight className="h-4 w-4" aria-hidden />
               </Button>
             </div>
@@ -279,9 +306,9 @@ export default function ProductsPage() {
               router.replace('/products');
             }
           }}
-          categories={data?.options.categories ?? []}
-          brands={data?.options.brands ?? []}
-          suppliers={data?.options.suppliers ?? []}
+          categories={options.categories}
+          brands={options.brands}
+          suppliers={options.suppliers}
           onSuccess={() => {
             setProductDialog(null);
             router.replace('/products');

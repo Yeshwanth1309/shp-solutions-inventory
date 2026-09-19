@@ -16,7 +16,6 @@ export interface RateLimitRule {
 
 export const RATE_LIMITS = {
   login: { limit: 10, windowSeconds: 300 },
-  mfa: { limit: 10, windowSeconds: 300 },
   passwordReset: { limit: 5, windowSeconds: 900 },
   stockMutation: { limit: 120, windowSeconds: 60 },
   report: { limit: 20, windowSeconds: 60 },

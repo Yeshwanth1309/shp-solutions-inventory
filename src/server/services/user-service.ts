@@ -15,7 +15,6 @@ export async function listUsers() {
       email: users.email,
       name: users.name,
       isActive: users.isActive,
-      mfaEnabled: users.mfaEnabled,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
       roleKey: roles.key,

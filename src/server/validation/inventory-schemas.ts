@@ -24,6 +24,8 @@ export const addStockSchema = z.object({
   reason: z.enum(ADD_REASONS),
   notes: z.string().trim().max(500).optional(),
   locationId: z.string().min(1).optional(),
+  /** Which supplier this specific batch came from — independent of whatever the product's own default supplier is. */
+  supplierId: z.string().min(1).optional(),
   requestId: requestIdSchema,
 });
 
@@ -32,6 +34,8 @@ export const removeStockSchema = z.object({
   reason: z.enum(REMOVE_REASONS),
   notes: z.string().trim().max(500).optional(),
   locationId: z.string().min(1).optional(),
+  /** Which customer this went to — relevant when reason is a Sale, optional otherwise (e.g. Damaged has no customer). */
+  customerId: z.string().min(1).optional(),
   requestId: requestIdSchema,
 });
 
@@ -48,6 +52,8 @@ export const historyQuerySchema = z.object({
   sku: z.string().trim().max(64).optional(),
   type: z.enum(['ADD', 'REMOVE', 'ADJUSTMENT', 'RETURN', 'DAMAGE', 'PURCHASE', 'SALE']).optional(),
   performedById: z.string().optional(),
+  supplierId: z.string().optional(),
+  customerId: z.string().optional(),
   reason: z.string().trim().max(120).optional(),
   locationId: z.string().optional(),
   from: z.coerce.date().optional(),

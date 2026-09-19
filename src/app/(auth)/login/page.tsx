@@ -29,8 +29,8 @@ export default function LoginPage() {
   async function onSubmit(values: FormValues) {
     setServerError(null);
     try {
-      const result = await apiPost<{ mfaRequired: boolean }>('/api/auth/login', values);
-      router.push(result.mfaRequired ? '/login/mfa' : '/dashboard');
+      await apiPost('/api/auth/login', values);
+      router.push('/dashboard');
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : 'Something went wrong. Try again.');
     }

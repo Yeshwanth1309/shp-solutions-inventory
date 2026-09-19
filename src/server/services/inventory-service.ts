@@ -66,6 +66,9 @@ export interface StockMutationInput {
   quantity: number;
   reason: string;
   notes?: string | null;
+  /** Which supplier this batch came from (add) or which customer it went to (remove) — see the schema comment on stock_transactions. */
+  supplierId?: string | null;
+  customerId?: string | null;
   /** Idempotency key. Same key + same product = same single movement. */
   requestId: string;
   performedById: string;
@@ -224,6 +227,8 @@ async function applyMutation(
           newStock,
           reason: input.reason,
           notes: input.notes ?? null,
+          supplierId: input.supplierId ?? null,
+          customerId: input.customerId ?? null,
           performedById: input.performedById,
           requestId: input.requestId,
         })

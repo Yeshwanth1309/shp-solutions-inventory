@@ -9,14 +9,12 @@ export interface SessionUser {
   name: string;
   roleKey: 'ADMIN' | 'INVENTORY_MANAGER' | 'STAFF';
   roleName: string;
-  mfaEnabled: boolean;
   mustChangePassword: boolean;
   permissions: string[];
 }
 
 interface SessionResponse {
   authenticated: boolean;
-  mfaSatisfied?: boolean;
   user?: SessionUser;
 }
 
@@ -30,6 +28,11 @@ export function useSession() {
     try {
       const result = await apiGet<SessionResponse>('/api/auth/session');
       setData(result);
+    } catch {
+      // A failed session check is treated as "not signed in" rather than a
+      // crash — the app-shell layout already redirects to /login when
+      // authenticated is false, which is the right behaviour here too.
+      setData({ authenticated: false });
     } finally {
       setLoading(false);
     }

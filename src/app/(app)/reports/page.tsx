@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { apiGet } from '@/lib/api-client';
 import { formatNumber } from '@/lib/utils';
 import { useSession } from '@/hooks/use-session';
+import { useToast } from '@/components/ui/toast';
 import { PERMISSIONS } from '@/lib/permissions';
 
 interface Summary {
@@ -27,14 +28,19 @@ interface Movement {
 
 export default function ReportsPage() {
   const { can } = useSession();
+  const { push } = useToast();
   const [summary, setSummary] = React.useState<Summary | null>(null);
   const [movement, setMovement] = React.useState<Movement | null>(null);
   const [exporting, setExporting] = React.useState(false);
 
   React.useEffect(() => {
-    apiGet<Summary>('/api/reports/inventory').then(setSummary);
-    apiGet<Movement>('/api/reports/movement').then(setMovement);
-  }, []);
+    apiGet<Summary>('/api/reports/inventory')
+      .then(setSummary)
+      .catch(() => push({ title: 'Could not load the inventory summary.', variant: 'error' }));
+    apiGet<Movement>('/api/reports/movement')
+      .then(setMovement)
+      .catch(() => push({ title: 'Could not load stock movement data.', variant: 'error' }));
+  }, [push]);
 
   async function exportCsv() {
     setExporting(true);

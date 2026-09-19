@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { forbidden, unauthenticated, AppError } from '@/lib/errors';
+import { forbidden, unauthenticated } from '@/lib/errors';
 import { resolveSession, type AuthenticatedSession } from '@/server/services/session-service';
 import { readSessionToken } from './session-cookie';
 import type { Permission } from '@/lib/permissions';
@@ -22,20 +22,8 @@ export async function requireSession(): Promise<AuthenticatedSession> {
   return session;
 }
 
-/**
- * A user with MFA enabled must have completed the second factor for this
- * session; otherwise the session is only half-authenticated.
- */
-export async function requireVerifiedSession(): Promise<AuthenticatedSession> {
-  const session = await requireSession();
-  if (session.user.mfaEnabled && !session.mfaVerifiedAt) {
-    throw new AppError('MFA_REQUIRED', 'Finish signing in with your authentication code.');
-  }
-  return session;
-}
-
 export async function requirePermission(permission: Permission): Promise<AuthenticatedSession> {
-  const session = await requireVerifiedSession();
+  const session = await requireSession();
   if (!session.user.permissions.has(permission)) {
     throw forbidden('You do not have access to this action.');
   }
@@ -43,19 +31,9 @@ export async function requirePermission(permission: Permission): Promise<Authent
 }
 
 export async function requireAnyPermission(...permissions: Permission[]): Promise<AuthenticatedSession> {
-  const session = await requireVerifiedSession();
+  const session = await requireSession();
   if (!permissions.some((p) => session.user.permissions.has(p))) {
     throw forbidden('You do not have access to this action.');
-  }
-  return session;
-}
-
-/** Sensitive changes need proof the user authenticated recently. */
-export async function requireRecentAuth(withinMinutes = 15): Promise<AuthenticatedSession> {
-  const session = await requireVerifiedSession();
-  const reference = session.mfaVerifiedAt ?? session.createdAt;
-  if (Date.now() - reference.getTime() > withinMinutes * 60 * 1000) {
-    throw new AppError('REAUTH_REQUIRED', 'Confirm your password again to make this change.');
   }
   return session;
 }

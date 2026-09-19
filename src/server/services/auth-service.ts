@@ -1,13 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '@/server/db/client';
-import { mfaCredentials, mfaRecoveryCodes, roles, users } from '@/server/db/schema';
-import {
-  generateRecoveryCode,
-  hashPassword,
-  hashRecoveryCode,
-  verifyPassword,
-} from '@/server/auth/crypto';
-import { buildOtpAuthUrl, buildQrDataUrl, generateTotpSecret, openTotpSecret, sealTotpSecret, verifyTotp } from '@/server/auth/mfa';
+import { roles, users } from '@/server/db/schema';
+import { hashPassword, verifyPassword } from '@/server/auth/crypto';
 import { AppError, forbidden, notFound, unauthenticated } from '@/lib/errors';
 import { enforceRateLimit, resetRateLimit } from '@/server/auth/rate-limit';
 import { recordAudit } from './audit-service';
@@ -16,14 +10,12 @@ import type { RoleKey } from '@/lib/permissions';
 
 const MAX_FAILED_ATTEMPTS = 8;
 const LOCKOUT_MINUTES = 15;
-const RECOVERY_CODE_COUNT = 10;
 
 export interface CredentialCheck {
   userId: string;
   email: string;
   name: string;
   roleKey: RoleKey;
-  mfaEnabled: boolean;
   mustChangePassword: boolean;
 }
 
@@ -55,7 +47,6 @@ export async function verifyCredentials(
       name: users.name,
       passwordHash: users.passwordHash,
       isActive: users.isActive,
-      mfaEnabled: users.mfaEnabled,
       mustChangePassword: users.mustChangePassword,
       failedLoginAttempts: users.failedLoginAttempts,
       lockedUntil: users.lockedUntil,
@@ -135,154 +126,8 @@ export async function verifyCredentials(
     email: user.email,
     name: user.name,
     roleKey: user.roleKey as RoleKey,
-    mfaEnabled: user.mfaEnabled,
     mustChangePassword: user.mustChangePassword,
   };
-}
-
-/** Checks a TOTP code against the user's stored (encrypted) secret. */
-export async function verifyUserTotp(userId: string, code: string): Promise<boolean> {
-  await enforceRateLimit('mfa', userId);
-  const rows = await db.select().from(mfaCredentials).where(eq(mfaCredentials.userId, userId)).limit(1);
-  const credential = rows[0];
-  if (!credential?.confirmedAt) return false;
-
-  const secret = openTotpSecret({
-    ciphertext: credential.secretCiphertext,
-    iv: credential.secretIv,
-    authTag: credential.secretAuthTag,
-  });
-  return verifyTotp(code, secret);
-}
-
-/** Consumes a single-use recovery code. */
-export async function consumeRecoveryCode(userId: string, code: string): Promise<boolean> {
-  await enforceRateLimit('mfa', userId);
-  const target = hashRecoveryCode(code);
-
-  const updated = await db
-    .update(mfaRecoveryCodes)
-    .set({ usedAt: new Date() })
-    .where(
-      sql`${mfaRecoveryCodes.userId} = ${userId} AND ${mfaRecoveryCodes.codeHash} = ${target} AND ${mfaRecoveryCodes.usedAt} IS NULL`,
-    )
-    .returning({ id: mfaRecoveryCodes.id });
-
-  if (updated.length === 0) return false;
-
-  await recordAudit({
-    action: 'MFA_RECOVERY_USED',
-    actorId: userId,
-    entityType: 'user',
-    entityId: userId,
-    summary: 'Signed in with a recovery code',
-  });
-  return true;
-}
-
-export interface MfaEnrolment {
-  secret: string;
-  otpauthUrl: string;
-  qrDataUrl: string;
-}
-
-/**
- * Starts enrolment. The secret is stored immediately but left unconfirmed, so
- * it is inert until the user proves they can generate a valid code from it.
- */
-export async function beginMfaEnrolment(userId: string, email: string): Promise<MfaEnrolment> {
-  const secret = generateTotpSecret();
-  const sealed = sealTotpSecret(secret);
-
-  await db
-    .insert(mfaCredentials)
-    .values({
-      userId,
-      secretCiphertext: sealed.ciphertext,
-      secretIv: sealed.iv,
-      secretAuthTag: sealed.authTag,
-      confirmedAt: null,
-    })
-    .onConflictDoUpdate({
-      target: mfaCredentials.userId,
-      set: {
-        secretCiphertext: sealed.ciphertext,
-        secretIv: sealed.iv,
-        secretAuthTag: sealed.authTag,
-        confirmedAt: null,
-      },
-    });
-
-  const otpauthUrl = buildOtpAuthUrl(email, secret);
-  return { secret, otpauthUrl, qrDataUrl: await buildQrDataUrl(otpauthUrl) };
-}
-
-/** Confirms enrolment and issues recovery codes (shown once). */
-export async function confirmMfaEnrolment(userId: string, code: string): Promise<string[]> {
-  const rows = await db.select().from(mfaCredentials).where(eq(mfaCredentials.userId, userId)).limit(1);
-  const credential = rows[0];
-  if (!credential) throw notFound('Start setting up two-factor authentication first.');
-
-  const secret = openTotpSecret({
-    ciphertext: credential.secretCiphertext,
-    iv: credential.secretIv,
-    authTag: credential.secretAuthTag,
-  });
-
-  if (!verifyTotp(code, secret)) {
-    throw new AppError('VALIDATION_ERROR', 'That code did not match. Check your authenticator app and try again.');
-  }
-
-  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, generateRecoveryCode);
-
-  await db.transaction(async (tx) => {
-    await tx.update(mfaCredentials).set({ confirmedAt: new Date() }).where(eq(mfaCredentials.userId, userId));
-    await tx.update(users).set({ mfaEnabled: true }).where(eq(users.id, userId));
-    await tx.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.userId, userId));
-    await tx.insert(mfaRecoveryCodes).values(codes.map((c) => ({ userId, codeHash: hashRecoveryCode(c) })));
-  });
-
-  await recordAudit({
-    action: 'MFA_ENROLLED',
-    actorId: userId,
-    entityType: 'user',
-    entityId: userId,
-    summary: 'Enabled two-factor authentication',
-  });
-
-  return codes;
-}
-
-/** Removing MFA is sensitive, so the current password is required again. */
-export async function removeMfa(userId: string, currentPassword: string): Promise<void> {
-  const rows = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId)).limit(1);
-  const user = rows[0];
-  if (!user) throw notFound('That user no longer exists.');
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
-    throw forbidden('That password is not correct.');
-  }
-
-  await db.transaction(async (tx) => {
-    await tx.delete(mfaCredentials).where(eq(mfaCredentials.userId, userId));
-    await tx.delete(mfaRecoveryCodes).where(eq(mfaRecoveryCodes.userId, userId));
-    await tx.update(users).set({ mfaEnabled: false }).where(eq(users.id, userId));
-  });
-
-  await recordAudit({
-    action: 'MFA_REMOVED',
-    actorId: userId,
-    entityType: 'user',
-    entityId: userId,
-    summary: 'Removed two-factor authentication',
-  });
-}
-
-export async function countUnusedRecoveryCodes(userId: string): Promise<number> {
-  const rows = await db
-    .select({ value: sql<number>`count(*)::int` })
-    .from(mfaRecoveryCodes)
-    .where(sql`${mfaRecoveryCodes.userId} = ${userId} AND ${mfaRecoveryCodes.usedAt} IS NULL`);
-  return rows[0]?.value ?? 0;
 }
 
 /** Changing a password revokes every other session for that user. */

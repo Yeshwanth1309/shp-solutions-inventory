@@ -21,6 +21,9 @@ export const PERMISSIONS = {
   SUPPLIER_VIEW: 'supplier:view',
   SUPPLIER_MANAGE: 'supplier:manage',
 
+  CUSTOMER_VIEW: 'customer:view',
+  CUSTOMER_MANAGE: 'customer:manage',
+
   LOCATION_VIEW: 'location:view',
   LOCATION_MANAGE: 'location:manage',
 
@@ -49,6 +52,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   [PERMISSIONS.INVENTORY_HISTORY_VIEW]: 'See stock history',
   [PERMISSIONS.SUPPLIER_VIEW]: 'See suppliers',
   [PERMISSIONS.SUPPLIER_MANAGE]: 'Add and edit suppliers',
+  [PERMISSIONS.CUSTOMER_VIEW]: 'See customers',
+  [PERMISSIONS.CUSTOMER_MANAGE]: 'Add and edit customers',
   [PERMISSIONS.LOCATION_VIEW]: 'See locations',
   [PERMISSIONS.LOCATION_MANAGE]: 'Add and edit locations',
   [PERMISSIONS.REPORT_VIEW]: 'See reports',
@@ -80,6 +85,8 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     PERMISSIONS.INVENTORY_HISTORY_VIEW,
     PERMISSIONS.SUPPLIER_VIEW,
     PERMISSIONS.SUPPLIER_MANAGE,
+    PERMISSIONS.CUSTOMER_VIEW,
+    PERMISSIONS.CUSTOMER_MANAGE,
     PERMISSIONS.LOCATION_VIEW,
     PERMISSIONS.LOCATION_MANAGE,
     PERMISSIONS.REPORT_VIEW,
@@ -93,6 +100,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     PERMISSIONS.INVENTORY_REMOVE,
     PERMISSIONS.INVENTORY_HISTORY_VIEW,
     PERMISSIONS.SUPPLIER_VIEW,
+    PERMISSIONS.CUSTOMER_VIEW,
     PERMISSIONS.LOCATION_VIEW,
   ],
 };

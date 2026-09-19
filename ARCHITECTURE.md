@@ -147,15 +147,18 @@ not, on its own, a control.
 
 Covered in full in [SECURITY.md](./SECURITY.md): here only in summary — RBAC
 enforced server-side, CSRF via double-submit cookie, rate limiting on
-login/MFA/stock mutations backed by a database counter table, parameterised
-queries throughout (Drizzle never string-interpolates values), AES-256-GCM
-for MFA secrets, bcrypt for passwords, structured logging with a fixed
-redaction list so credentials can never leak into logs.
+login/stock mutations backed by a database counter table, parameterised
+queries throughout (Drizzle never string-interpolates values), bcrypt for
+passwords, structured logging with a fixed redaction list so credentials
+can never leak into logs.
 
 ## Deployment
 
-Multi-stage Docker build → a single Node process serving the Next.js
-standalone output. See [DEPLOYMENT.md](./DEPLOYMENT.md). No infrastructure
+A single Node process (`next start`) serving the built application,
+deployed to a platform that runs it as a persistent process — Railway is
+what this project has actually been deployed to and verified against; any
+platform with the same model (not short-lived serverless functions) works
+equally well. See [DEPLOYMENT.md](./DEPLOYMENT.md). No infrastructure
 beyond "a Node runtime and a PostgreSQL 16 database" is required — Redis,
 message queues, etc. are explicitly not part of this design at this scale
 (see the rate-limiting note in [SECURITY.md](./SECURITY.md#rate-limiting) for
