@@ -145,7 +145,6 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
           // Product creation itself doesn't depend on this succeeding.
         });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, product, isEdit, reset]);
 
   async function onSubmit(values: ProductInput) {

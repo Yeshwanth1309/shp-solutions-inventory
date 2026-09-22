@@ -32,7 +32,7 @@ export default function BrandsPage() {
   const load = React.useCallback(() => {
     apiGet<{ brands: BrandRow[] }>('/api/brands')
       .then((data) => setBrands(data.brands))
-      .catch(() => push({ title: 'Could not load brands.', variant: 'destructive' }));
+      .catch(() => push({ title: 'Could not load brands.', variant: 'error' }));
   }, [push]);
 
   React.useEffect(() => {
@@ -63,7 +63,7 @@ export default function BrandsPage() {
     } catch (err) {
       push({ 
         title: err instanceof ApiError ? err.message : 'Failed to remove brand.', 
-        variant: 'destructive' 
+        variant: 'error' 
       });
     }
   }
@@ -129,7 +129,7 @@ export default function BrandsPage() {
                     Edit
                   </Button>
                   <Button 
-                    variant="destructive" 
+                    variant="destructive"
                     size="sm" 
                     onClick={() => handleDelete(brand.id, brand.name)}
                   >

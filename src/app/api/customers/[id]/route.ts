@@ -1,18 +1,31 @@
-import { ok, withRoute } from '@/server/http/route-handler';
-import { requirePermission } from '@/server/http/auth-guard';
-import { PERMISSIONS } from '@/lib/permissions';
-import { updateCustomer } from '@/server/services/catalogue-service';
-import { customerSchema } from '@/server/validation/catalogue-schemas';
+import { NextResponse } from 'next/server';
+import { updateCategory, deleteCategory } from '@/server/services/catalogue-service';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const updated = await updateCategory(id, body);
+    return NextResponse.json(updated);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to update category';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
 
-type Context = { params: Promise<{ id: string }> };
-
-export const PATCH = withRoute<Context>(async (request: Request, { params }) => {
-  const session = await requirePermission(PERMISSIONS.CUSTOMER_MANAGE);
-  const { id } = await params;
-  const body = customerSchema.partial().parse(await request.json());
-  const customer = await updateCustomer(id, body, { id: session.user.id, email: session.user.email });
-  return ok({ customer });
-});
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    await deleteCategory(id);
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to delete category';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

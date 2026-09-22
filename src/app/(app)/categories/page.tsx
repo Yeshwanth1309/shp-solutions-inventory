@@ -42,7 +42,7 @@ export default function CategoriesPage() {
   const load = React.useCallback(() => {
     apiGet<{ categories: CategoryRow[] }>('/api/categories')
       .then((data) => setCategories(data.categories))
-      .catch(() => push({ title: 'Could not load categories.', variant: 'destructive' }));
+      .catch(() => push({ title: 'Could not load categories.', variant: 'error' }));
   }, [push]);
 
   React.useEffect(() => {
@@ -73,7 +73,7 @@ export default function CategoriesPage() {
     } catch (err) {
       push({ 
         title: err instanceof ApiError ? err.message : 'Failed to remove category.', 
-        variant: 'destructive' 
+        variant: 'error' 
       });
     }
   }

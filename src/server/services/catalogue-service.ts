@@ -1,4 +1,5 @@
 import { asc, eq, sql } from 'drizzle-orm';
+import { isPgErrorCode, PG_ERROR } from '@/lib/pg-error';
 import { db } from '@/server/db/client';
 import { brands, categories, customers, locations, products, suppliers } from '@/server/db/schema';
 import { conflict, notFound } from '@/lib/errors';
@@ -232,9 +233,9 @@ export async function deleteCategory(id: string) {
       
     if (!deleted[0]) throw notFound('That category no longer exists.');
     return deleted[0];
-  } catch (error: any) {
-    // If the category is tied to products, Postgres will throw a foreign key error
-    if (error.code === '23503') {
+  } catch (error: unknown) {
+    // Safely narrow the type to check for Postgres foreign key violation code
+    if (isPgErrorCode(error, PG_ERROR.FOREIGN_KEY_VIOLATION)) {
       throw conflict('Cannot remove this category because products are assigned to it.');
     }
     throw error;
@@ -283,9 +284,8 @@ export async function deleteBrand(id: string) {
       
     if (!deleted[0]) throw notFound('That brand no longer exists.');
     return deleted[0];
-  } catch (error: any) {
-    // If the brand is tied to products, Postgres will throw a foreign key error
-    if (error.code === '23503') {
+  } catch (error: unknown) {
+    if (isPgErrorCode(error, PG_ERROR.FOREIGN_KEY_VIOLATION)) {
       throw conflict('Cannot remove this brand because products are assigned to it.');
     }
     throw error;
