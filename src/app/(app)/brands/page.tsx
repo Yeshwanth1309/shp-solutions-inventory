@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiGet, apiPost, ApiError } from '@/lib/api-client';
+import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useSession } from '@/hooks/use-session';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -27,11 +27,12 @@ export default function BrandsPage() {
   const [name, setName] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [editingItem, setEditingItem] = React.useState<BrandRow | null>(null);
 
   const load = React.useCallback(() => {
     apiGet<{ brands: BrandRow[] }>('/api/brands')
       .then((data) => setBrands(data.brands))
-      .catch(() => push({ title: 'Could not load brands. Check your connection and try again.', variant: 'error' }));
+      .catch(() => push({ title: 'Could not load brands.', variant: 'destructive' }));
   }, [push]);
 
   React.useEffect(() => {
@@ -39,9 +40,32 @@ export default function BrandsPage() {
   }, [load]);
 
   function openCreate() {
+    setEditingItem(null);
     setName('');
     setError(null);
     setDialogOpen(true);
+  }
+
+  function openEdit(brand: BrandRow) {
+    setEditingItem(brand);
+    setName(brand.name);
+    setError(null);
+    setDialogOpen(true);
+  }
+
+  async function handleDelete(id: string, brandName: string) {
+    if (!window.confirm(`Are you sure you want to remove "${brandName}"?`)) return;
+    
+    try {
+      await apiDelete(`/api/brands/${id}`);
+      push({ title: `Brand "${brandName}" removed.`, variant: 'success' });
+      load();
+    } catch (err) {
+      push({ 
+        title: err instanceof ApiError ? err.message : 'Failed to remove brand.', 
+        variant: 'destructive' 
+      });
+    }
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -49,8 +73,13 @@ export default function BrandsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost('/api/brands', { name, isActive: true });
-      push({ title: `Brand "${name}" added.`, variant: 'success' });
+      if (editingItem) {
+        await apiPatch(`/api/brands/${editingItem.id}`, { name });
+        push({ title: `Brand "${name}" updated.`, variant: 'success' });
+      } else {
+        await apiPost('/api/brands', { name, isActive: true });
+        push({ title: `Brand "${name}" added.`, variant: 'success' });
+      }
       setDialogOpen(false);
       load();
     } catch (err) {
@@ -77,14 +106,37 @@ export default function BrandsPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Changed to flex-col for a single-column list view */}
+      <div className="flex flex-col gap-3">
         {brands?.map((brand) => (
           <Card key={brand.id}>
-            <CardContent className="p-4">
-              <p className="font-medium">{brand.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {brand.productCount} product{brand.productCount === 1 ? '' : 's'}
-              </p>
+            {/* Changed flex layout to push text to the left and buttons to the right */}
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="font-medium">{brand.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {brand.productCount} product{brand.productCount === 1 ? '' : 's'}
+                </p>
+              </div>
+              
+              {can(PERMISSIONS.PRODUCT_CREATE) && (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => openEdit(brand)}
+                  >
+                    Edit
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => handleDelete(brand.id, brand.name)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -92,15 +144,30 @@ export default function BrandsPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add brand</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editingItem ? 'Edit brand' : 'Add brand'}</DialogTitle>
+          </DialogHeader>
           <form className="grid gap-3" onSubmit={onSubmit} noValidate>
             <div className="grid gap-1.5">
               <Label htmlFor="b-name">Brand name</Label>
-              <Input id="b-name" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. HP" />
+              <Input 
+                id="b-name" 
+                required 
+                autoFocus 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                placeholder="e.g. HP" 
+              />
             </div>
-            {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+            {error && (
+              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
             <DialogFooter>
-              <Button type="submit" disabled={submitting || name.trim().length < 1}>Add brand</Button>
+              <Button type="submit" disabled={submitting || name.trim().length < 1}>
+                {editingItem ? 'Save changes' : 'Add brand'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

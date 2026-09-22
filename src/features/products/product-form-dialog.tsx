@@ -93,23 +93,42 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
       description: product?.description ?? undefined,
       unit: product?.unit ?? 'PIECE',
       minimumStock: product?.minimumStock ?? 0,
-      maximumStock: product?.maximumStock,
+      maximumStock: product?.maximumStock ?? undefined,
       isActive: product?.isActive ?? true,
       categoryId: product?.categoryId ?? '',
-      brandId: product?.brandId,
-      supplierId: product?.supplierId,
+      brandId: product?.brandId ?? undefined,
+      supplierId: product?.supplierId ?? undefined,
       compatibility: product?.compatibility ?? [],
       partNumber: product?.partNumber ?? undefined,
       manufacturerPartNumber: product?.manufacturerPartNumber ?? undefined,
-      printerType: product?.printerType,
-      colorType: product?.colorType,
-      consumableType: product?.consumableType,
+      printerType: product?.printerType ?? undefined,
+      colorType: product?.colorType ?? undefined,
+      consumableType: product?.consumableType ?? undefined,
     },
   });
 
   React.useEffect(() => {
     if (!open) return;
-    reset();
+    reset({
+      sku: product?.sku ?? '',
+      barcode: product?.barcode ?? undefined,
+      name: product?.name ?? '',
+      model: product?.model ?? undefined,
+      description: product?.description ?? undefined,
+      unit: product?.unit ?? 'PIECE',
+      minimumStock: product?.minimumStock ?? 0,
+      maximumStock: product?.maximumStock ?? undefined,
+      isActive: product?.isActive ?? true,
+      categoryId: product?.categoryId ?? '',
+      brandId: product?.brandId ?? undefined,
+      supplierId: product?.supplierId ?? undefined,
+      compatibility: product?.compatibility ?? [],
+      partNumber: product?.partNumber ?? undefined,
+      manufacturerPartNumber: product?.manufacturerPartNumber ?? undefined,
+      printerType: product?.printerType ?? undefined,
+      colorType: product?.colorType ?? undefined,
+      consumableType: product?.consumableType ?? undefined,
+    });
     setServerError(null);
     setStartingQuantity('');
     requestIdRef.current = newRequestId();
@@ -127,7 +146,7 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, product, isEdit, reset]);
 
   async function onSubmit(values: ProductInput) {
     setServerError(null);
@@ -136,6 +155,7 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
         await apiPatch(`/api/products/${product.id}`, values);
         push({ title: 'Product updated.', variant: 'success' });
         onSuccess();
+        onOpenChange(false);
         return;
       }
 
@@ -163,6 +183,7 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
       }
 
       onSuccess();
+      onOpenChange(false);
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : 'Something went wrong. Try again.');
     }
@@ -174,7 +195,11 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit product' : 'Add product'}</DialogTitle>
         </DialogHeader>
-        <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <form 
+          className="grid gap-4" 
+          onSubmit={handleSubmit(onSubmit, (errors) => console.error("Validation Errors:", errors))} 
+          noValidate
+        >
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="name">Product name</Label>
@@ -347,10 +372,9 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
               <Label htmlFor="manufacturerPartNumber">Manufacturer part number (optional)</Label>
               <Input id="manufacturerPartNumber" {...register('manufacturerPartNumber')} />
             </div>
-          
           </div>
 
-                    <div className="grid gap-1.5">
+          <div className="grid gap-1.5">
             <Label htmlFor="compatibility">Compatible with (optional)</Label>
             <Controller
               control={control}
@@ -372,7 +396,13 @@ export function ProductFormDialog({ open, onOpenChange, onSuccess, categories, b
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="maximumStock">Maximum stock (optional)</Label>
-              <Input id="maximumStock" type="number" min={0} {...register('maximumStock', { valueAsNumber: true })} aria-invalid={!!errors.maximumStock} />
+              <Input
+                id="maximumStock"
+                type="number"
+                min={0}
+                {...register('maximumStock', { setValueAs: (value) => value === '' ? undefined : Number(value) })}
+                aria-invalid={!!errors.maximumStock}
+              />
               {errors.maximumStock && <p className="text-xs text-destructive">{errors.maximumStock.message}</p>}
             </div>
           </div>

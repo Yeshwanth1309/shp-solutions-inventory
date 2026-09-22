@@ -105,27 +105,29 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* Changed to flex flex-col to match the vertical single-row layout pattern */}
+      <div className="flex flex-col gap-3">
         {suppliers?.map((supplier) => (
           <Card key={supplier.id}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <CardContent className="flex items-center justify-between p-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
                   <p className="font-medium">{supplier.name}</p>
-                  {supplier.contactPerson && <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>}
+                  <Badge variant={supplier.isActive ? 'ok' : 'default'}>{supplier.isActive ? 'Active' : 'Inactive'}</Badge>
                 </div>
-                <Badge variant={supplier.isActive ? 'ok' : 'default'}>{supplier.isActive ? 'Active' : 'Inactive'}</Badge>
+                {supplier.contactPerson && <p className="text-sm text-muted-foreground">Contact: {supplier.contactPerson}</p>}
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  {supplier.phone && <span>{supplier.phone}</span>}
+                  {supplier.email && <span>{supplier.email}</span>}
+                </div>
+                <p className="text-xs text-muted-foreground">{supplier.productCount} product{supplier.productCount === 1 ? '' : 's'}</p>
               </div>
-              <div className="mt-2 grid gap-0.5 text-sm text-muted-foreground">
-                {supplier.phone && <p>{supplier.phone}</p>}
-                {supplier.email && <p>{supplier.email}</p>}
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{supplier.productCount} product{supplier.productCount === 1 ? '' : 's'}</span>
-                {can(PERMISSIONS.SUPPLIER_MANAGE) && (
+
+              {can(PERMISSIONS.SUPPLIER_MANAGE) && (
+                <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => openEdit(supplier)}>Edit</Button>
-                )}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

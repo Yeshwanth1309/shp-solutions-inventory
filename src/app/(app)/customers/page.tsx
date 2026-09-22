@@ -27,7 +27,6 @@ interface Customer {
   purchaseCount: number;
 }
 
-/** Sale-side counterpart to the Suppliers page — same pattern, deliberately. */
 export default function CustomersPage() {
   const { can } = useSession();
   const { push } = useToast();
@@ -106,27 +105,29 @@ export default function CustomersPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* Changed to flex flex-col to match the vertical single-row layout pattern */}
+      <div className="flex flex-col gap-3">
         {customers?.map((customer) => (
           <Card key={customer.id}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <CardContent className="flex items-center justify-between p-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
                   <p className="font-medium">{customer.name}</p>
-                  {customer.contactPerson && <p className="text-sm text-muted-foreground">{customer.contactPerson}</p>}
+                  <Badge variant={customer.isActive ? 'ok' : 'default'}>{customer.isActive ? 'Active' : 'Inactive'}</Badge>
                 </div>
-                <Badge variant={customer.isActive ? 'ok' : 'default'}>{customer.isActive ? 'Active' : 'Inactive'}</Badge>
+                {customer.contactPerson && <p className="text-sm text-muted-foreground">Contact: {customer.contactPerson}</p>}
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  {customer.phone && <span>{customer.phone}</span>}
+                  {customer.email && <span>{customer.email}</span>}
+                </div>
+                <p className="text-xs text-muted-foreground">{customer.purchaseCount} purchase{customer.purchaseCount === 1 ? '' : 's'}</p>
               </div>
-              <div className="mt-2 grid gap-0.5 text-sm text-muted-foreground">
-                {customer.phone && <p>{customer.phone}</p>}
-                {customer.email && <p>{customer.email}</p>}
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{customer.purchaseCount} purchase{customer.purchaseCount === 1 ? '' : 's'}</span>
-                {can(PERMISSIONS.CUSTOMER_MANAGE) && (
+
+              {can(PERMISSIONS.CUSTOMER_MANAGE) && (
+                <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => openEdit(customer)}>Edit</Button>
-                )}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

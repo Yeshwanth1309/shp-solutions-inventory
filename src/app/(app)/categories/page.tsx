@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiGet, apiPost, ApiError } from '@/lib/api-client';
+import { apiGet, apiPost, apiPatch, apiDelete, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useSession } from '@/hooks/use-session';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -21,7 +21,6 @@ interface CategoryRow {
   productCount: number;
 }
 
-/** Auto-generates a URL-safe slug from a display name, e.g. "Toners & Ink" -> "toners-ink". */
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -38,11 +37,12 @@ export default function CategoriesPage() {
   const [name, setName] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [editingItem, setEditingItem] = React.useState<CategoryRow | null>(null);
 
   const load = React.useCallback(() => {
     apiGet<{ categories: CategoryRow[] }>('/api/categories')
       .then((data) => setCategories(data.categories))
-      .catch(() => push({ title: 'Could not load categories. Check your connection and try again.', variant: 'error' }));
+      .catch(() => push({ title: 'Could not load categories.', variant: 'destructive' }));
   }, [push]);
 
   React.useEffect(() => {
@@ -50,9 +50,32 @@ export default function CategoriesPage() {
   }, [load]);
 
   function openCreate() {
+    setEditingItem(null);
     setName('');
     setError(null);
     setDialogOpen(true);
+  }
+
+  function openEdit(category: CategoryRow) {
+    setEditingItem(category);
+    setName(category.name);
+    setError(null);
+    setDialogOpen(true);
+  }
+
+  async function handleDelete(id: string, categoryName: string) {
+    if (!window.confirm(`Are you sure you want to remove "${categoryName}"?`)) return;
+    
+    try {
+      await apiDelete(`/api/categories/${id}`);
+      push({ title: `Category "${categoryName}" removed.`, variant: 'success' });
+      load();
+    } catch (err) {
+      push({ 
+        title: err instanceof ApiError ? err.message : 'Failed to remove category.', 
+        variant: 'destructive' 
+      });
+    }
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -60,8 +83,13 @@ export default function CategoriesPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost('/api/categories', { name, slug: slugify(name), isActive: true });
-      push({ title: `Category "${name}" added.`, variant: 'success' });
+      if (editingItem) {
+        await apiPatch(`/api/categories/${editingItem.id}`, { name, slug: slugify(name) });
+        push({ title: `Category "${name}" updated.`, variant: 'success' });
+      } else {
+        await apiPost('/api/categories', { name, slug: slugify(name), isActive: true });
+        push({ title: `Category "${name}" added.`, variant: 'success' });
+      }
       setDialogOpen(false);
       load();
     } catch (err) {
@@ -88,14 +116,37 @@ export default function CategoriesPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Changed to flex-col for a single-column list view */}
+      <div className="flex flex-col gap-3">
         {categories?.map((category) => (
           <Card key={category.id}>
-            <CardContent className="p-4">
-              <p className="font-medium">{category.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {category.productCount} product{category.productCount === 1 ? '' : 's'}
-              </p>
+            {/* Changed flex layout to push text to the left and buttons to the right */}
+            <CardContent className="flex items-center justify-between p-4">
+              <div>
+                <p className="font-medium">{category.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {category.productCount} product{category.productCount === 1 ? '' : 's'}
+                </p>
+              </div>
+              
+              {can(PERMISSIONS.PRODUCT_CREATE) && (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => openEdit(category)}
+                  >
+                    Edit
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => handleDelete(category.id, category.name)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -103,15 +154,30 @@ export default function CategoriesPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add category</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editingItem ? 'Edit category' : 'Add category'}</DialogTitle>
+          </DialogHeader>
           <form className="grid gap-3" onSubmit={onSubmit} noValidate>
             <div className="grid gap-1.5">
               <Label htmlFor="c-name">Category name</Label>
-              <Input id="c-name" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Toners & Ink" />
+              <Input 
+                id="c-name" 
+                required 
+                autoFocus 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                placeholder="e.g. Toners & Ink" 
+              />
             </div>
-            {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+            {error && (
+              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
             <DialogFooter>
-              <Button type="submit" disabled={submitting || name.trim().length < 2}>Add category</Button>
+              <Button type="submit" disabled={submitting || name.trim().length < 2}>
+                {editingItem ? 'Save changes' : 'Add category'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

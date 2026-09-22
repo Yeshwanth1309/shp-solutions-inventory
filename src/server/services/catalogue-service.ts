@@ -70,9 +70,6 @@ export async function updateSupplier(id: string, input: Partial<SupplierInput>, 
 }
 
 // --- Customers ---------------------------------------------------------------
-// Same pattern as suppliers, but productCount doesn't apply here — a
-// customer isn't linked to a product record, only to the individual sale
-// transactions they've been recorded against.
 
 export async function listCustomers(includeInactive = true) {
   return db
@@ -144,10 +141,6 @@ export async function listLocations(includeInactive = true) {
     .orderBy(asc(locations.name));
 }
 
-/**
- * Creating a location that claims the default flag clears it elsewhere first,
- * because a partial unique index permits only one default row.
- */
 export async function createLocation(input: LocationInput, actor: Actor) {
   const existing = await db.select({ id: locations.id }).from(locations).where(eq(locations.code, input.code)).limit(1);
   if (existing[0]) throw conflict(`Location code ${input.code} is already in use.`);
@@ -195,7 +188,7 @@ export async function updateLocation(id: string, input: Partial<LocationInput>, 
   return location;
 }
 
-// --- Categories and brands -------------------------------------------------
+// --- Categories -------------------------------------------------
 
 export async function listCategories() {
   return db
@@ -218,6 +211,38 @@ export async function createCategory(input: CategoryInput) {
   return inserted[0];
 }
 
+export async function updateCategory(id: string, input: Partial<CategoryInput>) {
+  const updated = await db
+    .update(categories)
+    .set(input)
+    .where(eq(categories.id, id))
+    .returning();
+  
+  const category = updated[0];
+  if (!category) throw notFound('That category no longer exists.');
+  return category;
+}
+
+export async function deleteCategory(id: string) {
+  try {
+    const deleted = await db
+      .delete(categories)
+      .where(eq(categories.id, id))
+      .returning();
+      
+    if (!deleted[0]) throw notFound('That category no longer exists.');
+    return deleted[0];
+  } catch (error: any) {
+    // If the category is tied to products, Postgres will throw a foreign key error
+    if (error.code === '23503') {
+      throw conflict('Cannot remove this category because products are assigned to it.');
+    }
+    throw error;
+  }
+}
+
+// --- Brands -------------------------------------------------
+
 export async function listBrands() {
   return db
     .select({
@@ -237,7 +262,38 @@ export async function createBrand(input: BrandInput) {
   return inserted[0];
 }
 
-/** Used by the first-run banner to tell the user what still needs setting up. */
+export async function updateBrand(id: string, input: Partial<BrandInput>) {
+  const updated = await db
+    .update(brands)
+    .set(input)
+    .where(eq(brands.id, id))
+    .returning();
+  
+  const brand = updated[0];
+  if (!brand) throw notFound('That brand no longer exists.');
+  return brand;
+}
+
+export async function deleteBrand(id: string) {
+  try {
+    const deleted = await db
+      .delete(brands)
+      .where(eq(brands.id, id))
+      .returning();
+      
+    if (!deleted[0]) throw notFound('That brand no longer exists.');
+    return deleted[0];
+  } catch (error: any) {
+    // If the brand is tied to products, Postgres will throw a foreign key error
+    if (error.code === '23503') {
+      throw conflict('Cannot remove this brand because products are assigned to it.');
+    }
+    throw error;
+  }
+}
+
+// --- Setup State -------------------------------------------------
+
 export async function getSetupState() {
   const [categoryRows, locationRows, productRows] = await Promise.all([
     db.select({ id: categories.id }).from(categories).limit(1),
